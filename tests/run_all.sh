@@ -71,6 +71,7 @@ else
     run "civ with no UU (python)" "$PY" tests/test_no_uu_civ.py
     run "unlock unit bonuses"     "$PY" tests/test_unlock_unit_bonuses.py
     run "shared prereq bonuses"   "$PY" tests/test_shared_prereq_bonuses.py
+    run "age-shift cards 221/247" "$PY" tests/test_age_shift_cards.py
     run "KM import tree gaps"     "$PY" tests/test_km_import_gaps.py
     run "elephant bonuses"        "$PY" tests/test_elephant_bonuses.py
     run "monk voice gender"       "$PY" tests/test_monk_voice.py

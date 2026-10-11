@@ -4102,30 +4102,35 @@ def _create_bonus_handler(dat: DatFile, bonus_id: int, civ_index: int,
         return True
 
     if bonus_id == 247:          # Parthian Tactics available in Castle Age
-        # Find all Imperial Age techs at the Archery Range (= Parthian Tactics).
-        # We scan rather than hardcode because tech IDs can drift across versions.
+        # Parthian Tactics only.  This used to move EVERY Imperial Archery Range
+        # tech, assuming Parthian Tactics was the only one: Arbalester, Heavy
+        # Cavalry Archer, Imperial Skirmisher, Elite Genitour, Heavy Mounted
+        # Crossbowman (even with the unit unticked) and more all came a whole
+        # age early, and a copy whose original the tree had unlocked with
+        # type=8 showed as a second button (reported 2026-10-10).
         _ARCHERY_RANGE = 87
+        _TECH_PARTHIAN_TACTICS = 436
         tt_eff_id = dat.civs[civ_index].tech_tree_id
-        for orig_tid, t in enumerate(dat.techs):
-            locs = getattr(t, 'research_locations', [])
-            if not locs or locs[0].location_id != _ARCHERY_RANGE:
-                continue
-            if 103 not in t.required_techs:   # must be gated on Imperial Age
-                continue
-            new_tech = deepcopy(t)
-            new_tech.civ = civ_index
-            reqs = list(new_tech.required_techs)
-            reqs[reqs.index(103)] = 102        # shift: Imperial → Castle Age
-            new_tech.required_techs = tuple(reqs)
-            eid = t.effect_id
-            if 0 <= eid < len(dat.effects):
-                new_eff = deepcopy(dat.effects[eid])
-                dat.effects.append(new_eff)
-                new_tech.effect_id = len(dat.effects) - 1
-            dat.techs.append(new_tech)
-            dat.effects[tt_eff_id].effect_commands.append(
-                EffectCommand(type=102, a=-1, b=-1, c=-1, d=float(orig_tid))
-            )
+        t = dat.techs[_TECH_PARTHIAN_TACTICS]
+        locs = getattr(t, 'research_locations', [])
+        if not locs or locs[0].location_id != _ARCHERY_RANGE or 103 not in t.required_techs:
+            print(f"       WARNING: bonus 247: tech {_TECH_PARTHIAN_TACTICS} is no longer the "
+                  f"Imperial Archery Range Parthian Tactics — Parthian Tactics stays Imperial")
+            return True
+        new_tech = deepcopy(t)
+        new_tech.civ = civ_index
+        reqs = list(new_tech.required_techs)
+        reqs[reqs.index(103)] = 102        # shift: Imperial → Castle Age
+        new_tech.required_techs = tuple(reqs)
+        eid = t.effect_id
+        if 0 <= eid < len(dat.effects):
+            new_eff = deepcopy(dat.effects[eid])
+            dat.effects.append(new_eff)
+            new_tech.effect_id = len(dat.effects) - 1
+        dat.techs.append(new_tech)
+        dat.effects[tt_eff_id].effect_commands.append(
+            EffectCommand(type=102, a=-1, b=-1, c=-1, d=float(_TECH_PARTHIAN_TACTICS))
+        )
         return True
 
     if bonus_id == 286:          # Can upgrade Bombard Cannons to Houfnice (Imperial Age gated)
@@ -4295,7 +4300,14 @@ def _create_bonus_handler(dat: DatFile, bonus_id: int, civ_index: int,
         # Shift Castle Age (102) Barracks techs to Feudal Age (101), and
         # Imperial Age (103) Barracks techs to Castle Age (102).
         # Man-at-Arms (gated on Feudal Age 101) is intentionally excluded.
+        #
+        # Only techs that upgrade one Spearman/Militia-line unit into another.
+        # Every age-gated Barracks tech used to move: Squires and Gambesons
+        # came in Feudal, and Elite Varangian Guard in Castle Age as a second
+        # button beside its type=8-unlocked original (reported 2026-10-10).
         _SHIFT = {103: 102, 102: 101}
+        _LINE_UNITS = {74, 75, 77, 473, 567,   # Militia line
+                       93, 358, 359}           # Spearman line
         tt_eff_id = dat.civs[civ_index].tech_tree_id
         barracks_ids = set(_barracks_tech_ids(dat))
         tree_units = _tree_unit_ids(civ_def or {})
@@ -4321,11 +4333,15 @@ def _create_bonus_handler(dat: DatFile, bonus_id: int, civ_index: int,
             # This excludes DLC units (Elite War Dog, Fire Lancer, Hoplite, Champi Warrior, etc.)
             # that would otherwise get cloned and appear as researchable at the Barracks.
             eid_check = t.effect_id
-            if 0 <= eid_check < len(dat.effects):
-                upgrade_srcs = {int(ec.a) for ec in dat.effects[eid_check].effect_commands
-                                if ec.type == EC_UPGRADE}
-                if upgrade_srcs and not upgrade_srcs.intersection(tree_units):
-                    continue
+            if not 0 <= eid_check < len(dat.effects):
+                continue
+            upgrades = [(int(ec.a), int(ec.b)) for ec in dat.effects[eid_check].effect_commands
+                        if ec.type == EC_UPGRADE]
+            if not any(a in _LINE_UNITS and b in _LINE_UNITS for a, b in upgrades):
+                continue
+            upgrade_srcs = {a for a, _ in upgrades}
+            if not upgrade_srcs.intersection(tree_units):
+                continue
             new_tech = deepcopy(t)
             new_tech.civ = civ_index
             new_reqs = list(new_tech.required_techs)
