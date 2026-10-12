@@ -957,6 +957,15 @@ footer {
 .arch-card.selected .arch-card-label { color: var(--crimson); }
 .arch-card-example { color: var(--ash); }
 
+.sticky-nav {
+  position: sticky;
+  top: 0;
+  padding-block: 10px 5px;
+  z-index: 10;
+}
+.filter-nav {
+  background-color: var(--parch-light);
+}
 .bonus-grid {
   display: flex;
   flex-direction: column;
@@ -1025,6 +1034,28 @@ footer {
   border-color: rgba(255,255,255,0.55);
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   background-color: color-mix(in srgb, var(--pill-bg) 80%, white);
+}
+/* "Clear filters": the pill's shape, in black so it stands apart from them. */
+.cat-pill-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  color: #fff;
+  background-color: #000;
+  border: 2px solid #000;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.cat-pill-clear:hover {
+  background-color: #333;
 }
 .bonus-card {
   border-style: solid;
@@ -1574,6 +1605,7 @@ img.card-main-image {
   color: var(--body-text);
   line-height: 1.2;
   margin-bottom: 3px;
+  text-align: center;
 }
 /* ut-card-name inside a bonus-card (new card-style UT picker) */
 .bonus-card .ut-card-name {

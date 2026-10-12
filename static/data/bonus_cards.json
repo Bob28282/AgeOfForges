@@ -3560,7 +3560,7 @@
   },
   "458": {
     "chronicles": true,
-    "category": "chronicles",
+    "category": "building",
     "heading": "Any Elevation",
     "stat": "All buildings except Town Centers can be built on any elevation",
     "entity": "house",

@@ -2110,7 +2110,9 @@ function _makeBonusCardEl(c, mult, isSelected, toggleFn, getDraftEntry, prefix =
 
 const _rootStyle = getComputedStyle(document.documentElement);
 
-function _renderCatPills(containerId, filterSet, filterFn, categories = _BONUS_CATEGORIES) {
+// searchId: the page's search box.  When given, a "Clear filters" button
+// follows the pills and resets both (the civ and team bonus pages).
+function _renderCatPills(containerId, filterSet, filterFn, categories = _BONUS_CATEGORIES, searchId = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.innerHTML = '';
@@ -2134,6 +2136,20 @@ function _renderCatPills(containerId, filterSet, filterFn, categories = _BONUS_C
       filterFn();
     });
     container.appendChild(pill);
+  }
+  if (searchId) {
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'cat-pill-clear';
+    clear.innerHTML = '<i class="fa-solid fa-xmark"></i> Clear filters';
+    clear.addEventListener('click', () => {
+      filterSet.clear();
+      container.querySelectorAll('.cat-pill.active').forEach(p => p.classList.remove('active'));
+      const search = document.getElementById(searchId);
+      if (search) search.value = '';
+      filterFn();
+    });
+    container.appendChild(clear);
   }
 }
 
@@ -4236,8 +4252,10 @@ async function init() {
     // Render category filter pills
     const _getBonusQ = () => (document.getElementById("bonus-search")?.value || "").toLowerCase();
     const _getTeamQ  = () => (document.getElementById("team-bonus-search")?.value || "").toLowerCase();
-    _renderCatPills("bonus-cat-pills",      _bonusCatFilter, () => _filterBonusGrid(_getBonusQ()));
-    _renderCatPills("team-bonus-cat-pills", _teamCatFilter,  () => _filterTeamBonusGrid(_getTeamQ()));
+    _renderCatPills("bonus-cat-pills",      _bonusCatFilter, () => _filterBonusGrid(_getBonusQ()),
+                    _BONUS_CATEGORIES, "bonus-search");
+    _renderCatPills("team-bonus-cat-pills", _teamCatFilter,  () => _filterTeamBonusGrid(_getTeamQ()),
+                    _BONUS_CATEGORIES, "team-bonus-search");
     // Wire search inputs to filter the grids
     document.getElementById("bonus-search")
       .addEventListener("input", e => _filterBonusGrid(e.target.value.toLowerCase()));
