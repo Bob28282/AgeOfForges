@@ -2110,6 +2110,21 @@ function _makeBonusCardEl(c, mult, isSelected, toggleFn, getDraftEntry, prefix =
 
 const _rootStyle = getComputedStyle(document.documentElement);
 
+// The Previous/Next bar is position: sticky at the bottom.  It is stuck while
+// the spot it would otherwise occupy (the sentinel right after it) is below
+// the window, and .is-sticky lets the CSS style that state.  An observer
+// rather than a scroll listener: it also catches a step change that makes the
+// page shorter or longer without any scrolling.
+function _watchStickyNav() {
+  const nav = document.querySelector('.bottom-nav');
+  const sentinel = document.querySelector('.bottom-nav-sentinel');
+  if (!nav || !sentinel || !('IntersectionObserver' in window)) return;
+  new IntersectionObserver(([e]) => {
+    const below = e.boundingClientRect.top > (e.rootBounds ? e.rootBounds.bottom : window.innerHeight);
+    nav.classList.toggle('is-sticky', !e.isIntersecting && below);
+  }).observe(sentinel);
+}
+
 // searchId: the page's search box.  When given, a "Clear filters" button
 // follows the pills and resets both (the civ and team bonus pages).
 function _renderCatPills(containerId, filterSet, filterFn, categories = _BONUS_CATEGORIES, searchId = null) {
@@ -4266,6 +4281,7 @@ async function init() {
     renderTeamBonusGrid();
   });
   wireCustomBonusPicker();
+  _watchStickyNav();
 
   // If loading a filled draft, unlock all step dots immediately so the user
   // can jump directly to any step without clicking through the whole wizard
