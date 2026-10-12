@@ -527,12 +527,22 @@ async function _cbSave() {
   if (!effects.length) return _cbError("Add at least one effect with a non-zero amount.");
   const tooLow = effects.find(e => e.op === "mul" && e.value <= -100);
   if (tooLow) return _cbError(`${_cbAttr(tooLow.attr).label} can't go down by 100% or more.`);
+  // The server drops these silently; say why instead.  A lower population
+  // limit was tested in game and ignored (2026-10-11).
+  const negative = effects.find(e => _cbAttr(e.attr)?.positive && e.value < 0);
+  if (negative) {
+    const label = _cbAttr(negative.attr).label;
+    return _cbError(`${label.charAt(0).toUpperCase() + label.slice(1)} can only be raised` +
+      (negative.attr === "pop_cap" ? " — the game ignores a lower limit." : "."));
+  }
   const card = {
     target:  _cbWork.target,
     effects: effects.map(e => {
       if (_cbAttr(e.attr)?.novalue) return { attr: e.attr, op: "set" };
       const out = { attr: e.attr, op: e.op, value: e.value };
       if (_CB_COST.has(e.attr)) out.resource = e.resource || "all";
+      // Without this every one-time resources card saved as gold.
+      if (e.attr === "resources") out.resource = e.resource || "gold";
       return out;
     }),
     text: document.getElementById("cb-text").value.trim(),
