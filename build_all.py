@@ -161,7 +161,10 @@ _UNIQUE_IMP_STRINGS = [
     "Hauberk (Knights +1/+2P armor)",
     "Druzhina (Infantry damage adjacent units)",
     "Supremacy (Villagers stronger in combat)",
-    "Timurid Siegecraft (Trebuchet units +2 range, enables Flaming Camels)",
+    # The Flaming Camel half is left out on purpose (user, 2026-10-12): an
+    # enable alone doesn't make a unit trainable, and the "Flaming Camels
+    # available in Siege Workshops" card covers it.  See _UT_DROPPED_ENABLES.
+    "Timurid Siegecraft (Trebuchet units +2 range)",
     "Crenellations (+3 range Castles garrisoned infantry fire arrows)",
     "Artillery (+2 range Bombard Towers, Bombard Cannons, Cannon Galleons)",
     "Paper Money (Lumberjacks slowly generate gold in addition to wood)",

@@ -75,6 +75,30 @@ check("Anarchy touches our unique unit", any(c[1] in (uu, elite) for c in castle
 check("and never the Huskarl it was written for (41/555/761)",
       not any(c[1] in (41, 555, 761) for c in castle), str(castle))
 
+check("Timurid Siegecraft no longer enables the Flaming Camel (1263; a card covers it)",
+      not any(c[0] == 2 and c[1] == 1263 for c in imp), str([c for c in imp if c[0] == 2]))
+
+# Upgrades were skipped wholesale, so every preset built on them did nothing
+# (or half) for a custom civ.
+FLEMISH_REVOLUTION, THALASSOCRACY = 4, 22
+civ_def2 = dict(civ_def, alias="UT Upgrade Probe",
+                bonuses=[[], [19], [[THALASSOCRACY, 1]], [[FLEMISH_REVOLUTION, 1]], []])
+with contextlib.redirect_stdout(io.StringIO()):
+    res2 = apply_civ(dat, civ_def2, target_slot=2)
+
+print("Flemish Revolution (Imperial UT)")
+fr = cmds_of(res2["imp_ut_tech_id"])
+ups = {(c[1], c[2]) for c in fr if c[0] == 3}
+check("Villagers (83/293) upgrade to Flemish Militia (1663/1697)",
+      {(83, 1663), (293, 1697)} <= ups, str(sorted(ups)[:6]))
+check("every one of the 26 vanilla upgrades is there", len(ups) >= 26, f"{len(ups)} upgrades")
+check("the Flemish Militia (1699) is enabled", any(c[0] == 2 and c[1] == 1699 for c in fr))
+
+print("Thalassocracy (Castle UT)")
+th = cmds_of(res2["castle_ut_tech_id"])
+check("Docks upgrade to Harbors (45 -> 1189)", any(c[0] == 3 and (c[1], c[2]) == (45, 1189) for c in th),
+      str([c for c in th if c[0] == 3]))
+
 print()
 if failures:
     print(f"{failures} FAILED")

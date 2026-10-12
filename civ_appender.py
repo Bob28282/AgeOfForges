@@ -6724,6 +6724,12 @@ _KM_IMP_UT_TECHS: dict[int, int] = {
 # keep as-is once `a` is substituted with the CURRENT civ's own elite UU id.
 UU_SUBSTITUTION_TYPES = (7, 12)
 
+# Unit enables a UT preset deliberately leaves out.  Timurid Siegecraft enables
+# the Flaming Camel; an enable alone shows the unit without making it trainable
+# (that needs its make-avail tech, CLAUDE.md quirk 2), and the "Flaming Camels
+# available in Siege Workshops" card covers it.  User's call, 2026-10-12.
+_UT_DROPPED_ENABLES = frozenset({1263})
+
 # type=12 (Cuman Mercenaries-style "team gets free trains at the Castle")
 # specifically needs a DEDICATED unit slot, not just a substituted unit id —
 # Cumans' own MKIPCHAK (1260) is a SEPARATE unit from the normally-trained
@@ -6911,6 +6917,7 @@ def _build_ut_effect_cmds(dat: DatFile, entries: list, label: str,
                               f" → will substitute with dest civ's UU")
 
         entry_start = len(cmds)
+        src_uu_ids = src_base_uu_ids | src_elite_uu_ids
         for ec in all_cmds:
             a = int(ec.a)
             if ec.type == EC_ENABLE:
@@ -6919,9 +6926,20 @@ def _build_ut_effect_cmds(dat: DatFile, entries: list, label: str,
                     print(f"       {label} bonus {bonus_id}: deferring base-UU "
                           f"enable (type=2 a={a}) for substitution")
                     pending_base_uu_subs.extend(_scale_ec_cmds(ec, multiplier))
-                # All other EC_ENABLE (including non-UU) are intentionally skipped
+                elif a not in src_uu_ids and a not in _UT_DROPPED_ENABLES:
+                    # Flemish Revolution's Flemish Militia.  Hiding (b=0) and
+                    # another civ's UU stay skipped.
+                    cmds.append(ec)
                 continue
             if ec.type == EC_UPGRADE:
+                # Eight presets are built on upgrades: Flemish Revolution
+                # (Villagers -> Flemish Militia), Thalassocracy (Docks ->
+                # Harbors), Nomads, Madrasah, Svan Towers, Greek Fire,
+                # Rocketry, Citadels.  All were skipped, so those halves never
+                # fired for a custom civ.  One that touches the source civ's
+                # unique unit (its elite upgrade) still is.
+                if a not in src_uu_ids and int(ec.b) not in src_uu_ids:
+                    cmds.append(ec)
                 continue
             if ec.type in UU_SUBSTITUTION_TYPES:
                 print(f"       {label} bonus {bonus_id}: deferring unit "
