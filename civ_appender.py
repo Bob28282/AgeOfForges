@@ -3741,6 +3741,39 @@ def _find_upgrade_tech(dat: DatFile, from_unit: int, to_unit: int,
     return None
 
 
+# Thracian bonuses from Chronicles (#74), both read from the player's own DAT.
+_ELEVATION_BONUS = 458
+_FORT_AURA_BONUS = 459
+# Castle, Watch Tower, Guard Tower, Keep, Bombard Tower.
+_FORT_AURA_BUILDINGS = (82, 79, 234, 235, 236)
+_WORK_RATE_ATTR = 13
+_AURA_ACTION = 155
+
+
+def _thracian_civ(dat: DatFile) -> int | None:
+    return next((i for i, c in enumerate(dat.civs) if c.name == "Thracians"), None)
+
+
+def _thracian_fort_auras(dat: DatFile) -> list:
+    """The work-rate aura tasks of the unit the Thracians upgrade the Castle
+    into (their Fort, 2418 today), found the way the game wires it."""
+    thr = _thracian_civ(dat)
+    if thr is None:
+        return []
+    fort = None
+    for t in dat.techs:
+        if t.civ != thr or not 0 <= t.effect_id < len(dat.effects):
+            continue
+        for c in dat.effects[t.effect_id].effect_commands:
+            if c.type == EC_UPGRADE and int(c.a) == 82:
+                fort = int(c.b)
+    if fort is None or fort >= len(dat.civs[thr].units):
+        return []
+    u = dat.civs[thr].units[fort]
+    return [t for t in (u.bird.tasks if u is not None and u.bird else [])
+            if t.action_type == _AURA_ACTION and int(t.search_wait_time) == _WORK_RATE_ATTR]
+
+
 # Bonus IDs dispatched by _create_bonus_handler below. Keep in sync with the
 # `if bonus_id == ...` blocks — used by the "Known Limitations" page to know
 # which createCivBonus-style bonuses are actually covered.
@@ -3755,6 +3788,7 @@ HANDLED_BONUS_IDS = {
     339,   # Military buildings + Docks give food (vanilla hit every building)
     403,   # Settlement unlock (handled via Step 5b of _apply_tree_wiring)
     404,   # Mining Camp techs free (Bohemians)
+    _ELEVATION_BONUS, _FORT_AURA_BONUS,   # 458/459: Thracians (Chronicles, #74)
     *_UNLOCK_UNIT_BONUSES,   # 405-416: regional / second unique unit unlocks
     *_UNIT_SKIN_BONUSES,     # 457: Palintonon (Chronicles skin of the Trebuchet)
 }
@@ -3838,6 +3872,53 @@ def _create_bonus_handler(dat: DatFile, bonus_id: int, civ_index: int,
                             name="C-Bonus, military buildings + Docks give food")
         print(f"       Food buildings: {len(cmds)} buildings give +{amount:g} food "
               f"({len(_FOOD_BUILDING_SLOT_FIXUPS)} storage slots opened)")
+        return True
+
+    if bonus_id == _ELEVATION_BONUS:     # Buildings on any elevation (Thracians, #74)
+        # No effect command does this: it is each building's own hill_mode
+        # (0 = any elevation), set on the Thracians' copies.  Read from the
+        # player's DAT, so buildings a patch adds or moves follow along; the
+        # Thracians leave Town Centers and wonders alone, and so do we.
+        thr = _thracian_civ(dat)
+        if thr is None:
+            print("       WARNING: bonus 458: no Thracian civ in this game's data — skipped")
+            return True
+        ours, theirs = dat.civs[civ_index].units, dat.civs[thr].units
+        changed = 0
+        for uid in range(min(len(ours), len(theirs))):
+            u, t = ours[uid], theirs[uid]
+            if u is None or t is None or u.type != 80:
+                continue
+            if t.hill_mode == 0 and u.hill_mode != 0:
+                u.hill_mode = 0
+                changed += 1
+        print(f"       Any elevation: {changed} buildings (as the Thracians')")
+        return True
+
+    if bonus_id == _FORT_AURA_BONUS:     # Castles/towers speed up miners + lumberjacks (Thracians, #74)
+        # The Thracian Fort (their Castle upgrade) carries six aura tasks
+        # (action 155, attribute 13 work rate, x1.15 in 10 tiles) on
+        # Lumberjacks and Stone/Gold Miners.  Copy them onto this civ's own
+        # Castle and towers, as Unhinged Empires appends Cao Cao's aura.
+        src = _thracian_fort_auras(dat)
+        if not src:
+            print("       WARNING: bonus 459: no Thracian Fort aura in this game's data — skipped")
+            return True
+        added = 0
+        for uid in _FORT_AURA_BUILDINGS:
+            if uid >= len(dat.civs[civ_index].units):
+                continue
+            u = dat.civs[civ_index].units[uid]
+            if u is None or not getattr(u, "bird", None):
+                continue
+            for t in src:
+                task = deepcopy(t)
+                task.id = len(u.bird.tasks)
+                task.work_value_1 = t.work_value_1 * mult
+                u.bird.tasks.append(task)
+            added += 1
+        print(f"       Work-rate aura: {len(src)} tasks (+{src[0].work_value_1 * mult:.0%} in "
+              f"{src[0].work_range:g} tiles) on {added} buildings")
         return True
 
     if bonus_id == 404:          # Mining Camp technologies free (Bohemians)

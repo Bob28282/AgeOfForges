@@ -430,5 +430,7 @@
   "454": "Unlock the Sannāhya (Puru elephant, Stable, Castle Age)",
   "455": "Unlock the Hoplite (Greek infantry, Barracks, Castle Age)",
   "456": "Unlock the Scythian Horse Archer (replaces the Cavalry Archer line, Archery Range, Castle Age)",
-  "457": "Palintonon replaces the Trebuchet (Chronicles), +15% attack"
+  "457": "Palintonon replaces the Trebuchet (Chronicles), +15% attack",
+  "458": "All buildings except Town Centers can be built on any elevation",
+  "459": "Castles and towers make nearby Lumberjacks and Miners work 15% faster"
 }

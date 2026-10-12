@@ -3557,5 +3557,24 @@
     "entity2": "trebuchet",
     "description": "Castle — Trebuchet slot",
     "multiplier": false
+  },
+  "458": {
+    "chronicles": true,
+    "category": "chronicles",
+    "heading": "Any Elevation",
+    "stat": "All buildings except Town Centers can be built on any elevation",
+    "entity": "house",
+    "description": "Buildings",
+    "multiplier": false
+  },
+  "459": {
+    "chronicles": true,
+    "category": "chronicles",
+    "type": "dual",
+    "heading": "+15%",
+    "stat": "Castles and towers make nearby Lumberjacks and Miners work 15% faster (10 tiles)",
+    "entity": "castle",
+    "entity2": "lumber_camp",
+    "description": "Lumberjacks + Miners"
   }
 }
