@@ -6882,9 +6882,15 @@ def _build_ut_effect_cmds(dat: DatFile, entries: list, label: str,
         src_base_uu_ids: set[int] = set()
         src_elite_uu_ids: set[int] = set()
         if source_tech.civ != -1:
-            for ec in all_cmds:
-                if _is_enable(ec):
-                    src_base_uu_ids.add(int(ec.a))
+            # Only an enable of the source civ's REAL unique unit marks the
+            # Anarchy/Marauders shape.  Timurid Siegecraft enables the Flaming
+            # Camel and Flemish Revolution the Flemish Militia; read as "the
+            # UU", every other unit the tech touches became "the elite UU", so
+            # Timurid Siegecraft's five trebuchet +2 range commands landed on
+            # this civ's Elite UU — a melee unit with +10 range that never hit
+            # anything, and trebuchets with no bonus (reported 2026-10-12).
+            real_base, _ = _src_civ_uu_ids(dat, source_tech.civ)
+            src_base_uu_ids = {int(ec.a) for ec in all_cmds if _is_enable(ec)} & real_base
             if src_base_uu_ids:
                 # Anarchy/Marauders style: derive elite as remainder of unit refs
                 all_unit_refs = {int(ec.a) for ec in all_cmds
