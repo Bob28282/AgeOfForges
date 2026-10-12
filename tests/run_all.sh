@@ -39,6 +39,7 @@ run "no direct civ_def reads"     "$PY" tests/test_no_direct_civdef_reads.py
 run "catalog resource ids"        "$PY" tests/test_resource_ids.py
 run "civ roster"                  "$PY" tests/test_civ_roster.py
 run "game strings + exe bundle"    "$PY" tests/test_game_strings.py
+run "no blank unit icons"         "$PY" tests/test_blank_uniticons.py
 run "button pages"                "$PY" tests/test_button_pages.py
 run "UT cost override"            "$PY" tests/test_ut_cost_override.py
 run "multiplier scaling"          "$PY" tests/test_multiplier_scaling.py

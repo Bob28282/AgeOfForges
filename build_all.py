@@ -434,6 +434,16 @@ def sanitize_kv_strings(content: str) -> tuple[str, list[int]]:
     return "\n".join(out) + ("\n" if content.endswith("\n") else ""), sorted(repaired)
 
 
+def _is_blank_png(data: bytes) -> bool:
+    """True for an image with no picture in it: every pixel identical."""
+    from PIL import Image
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            return all(lo == hi for lo, hi in im.convert("RGBA").getextrema())
+    except OSError:
+        return False
+
+
 def _build_combined_ui_zip(ai_stubs: dict[str, bytes],
                             button_pngs: dict[str, bytes],
                             combined_strings: dict[str, str],
@@ -471,9 +481,15 @@ def _build_combined_ui_zip(ai_stubs: dict[str, bytes],
             for icon_file in sorted(uniticons_folder.glob("*.png")):
                 if not re.match(r"^\d+_\d+\.png$", icon_file.name):
                     continue
+                data = icon_file.read_bytes()
+                # A shipped icon replaces the game's own, and 27 of ours are
+                # blank placeholders: the civ picker drew a blue box for 22
+                # civs we never touched (the Poles' Winged Hussar, ...).
+                if _is_blank_png(data):
+                    continue
                 zf.writestr(
                     f"resources/_common/wpfg/resources/uniticons/{icon_file.name}",
-                    icon_file.read_bytes(),
+                    data,
                 )
         for lang, content in combined_strings.items():
             content, repaired = sanitize_kv_strings(content)
