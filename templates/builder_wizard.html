@@ -1026,14 +1026,19 @@
 </div>
 
 {# ── Navigation ─────────────────────────────────────────────────────────────── #}
-<div class="d-flex justify-content-between align-items-center mt-3">
-  <button id="btn-prev" class="btn btn-outline-primary" disabled>
-    <i class="fa-solid fa-arrow-left me-1"></i> Previous
-  </button>
-  <div class="text-muted small" id="step-counter">Step 1 of 9</div>
-  <button id="btn-next" class="btn btn-primary">
-    Next <i class="fa-solid fa-arrow-right ms-1"></i>
-  </button>
+{# Two levels: a scroll-state query styles what is INSIDE its container, never
+   the container itself, so the sticky outer div is the container and the
+   inner one carries the look. #}
+<div class="bottom-nav mt-3">
+  <div class="bottom-nav-inner d-flex justify-content-between align-items-center">
+    <button id="btn-prev" class="btn btn-outline-primary" disabled>
+      <i class="fa-solid fa-arrow-left me-1"></i> Previous
+    </button>
+    <div class="text-muted small" id="step-counter">Step 1 of 9</div>
+    <button id="btn-next" class="btn btn-primary">
+      Next <i class="fa-solid fa-arrow-right ms-1"></i>
+    </button>
+  </div>
 </div>
 
 {# Singleton floating tooltips (positioned by JS) #}

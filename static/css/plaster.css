@@ -635,6 +635,25 @@ footer {
   color: var(--ash);
 }
 
+/* The sticky outer div is the scroll-state container; a container query can
+   only style its descendants, so the inner div carries the look. */
+.bottom-nav {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  container-type: scroll-state;
+}
+.bottom-nav-inner {
+  padding: 10px;
+  background: var(--bg-plaster);
+  transition: background-color 0.15s;
+}
+@container scroll-state(stuck: bottom) {
+  .bottom-nav-inner {
+    background: var(--parch-light);
+  }
+}
+
 /* ── Drop zone ───────────────────────────────────────────────────────────── */
 .drop-zone {
   border: 2px dashed var(--border-dark);
