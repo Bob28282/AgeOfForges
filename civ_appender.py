@@ -3454,20 +3454,20 @@ def _upgrade_line(neighbours: dict[int, set[int]], unit_id: int) -> set[int]:
     return seen
 
 
-def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
-                          warnings: list[str], uu_ids: tuple[int, ...] = (),
-                          ut_ids: tuple = ()) -> int:
-    """Build each custom bonus card as its own civ-owned auto-fire tech.
+def _custom_bonus_resolver(dat: DatFile, civ_index: int, civ_def: dict,
+                           uu_ids: tuple[int, ...] = (), ut_ids: tuple = (),
+                           team: bool = False):
+    """(line_of, resolve) — the build-time answers custom_bonus.card_commands
+    needs for this civ.  `uu_ids` is this civ's unique unit, base and elite, for
+    the "Unique unit" group; `ut_ids` its Castle and Imperial unique techs, for
+    "Unique techs".
 
-    Each card is its own tech (or several, if it outgrows one Effect), so the
-    ~189-command ceiling never reaches the player.  `uu_ids` is this civ's
-    unique unit, base and elite, for the "Unique unit" group; `ut_ids` its
-    Castle and Imperial unique techs, for "Unique techs".
+    `team` builds for a team bonus (#54), which every ally runs: "trained at"
+    means everything trained there, not just what THIS civ trains, and nothing
+    is resolved to our own unique unit or readied on our own buildings
+    (custom_bonus.team_problem keeps those cards out in the first place).
     """
     import custom_bonus
-    cards = custom_bonus.normalize(civ_def.get("custom_bonuses"))
-    if not cards:
-        return 0
     neighbours = _upgrade_neighbours(dat)
     units = dat.civs[civ_index].units
     n_units = len(units)
@@ -3557,18 +3557,21 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
     # building, and which unit is its UU.  Both keep alternate forms.
     present = _civ_present_units(civ_def, dat, civ_index) | {u for u in uu_ids if u >= 0}
 
-    def resolve(kind: str, arg) -> set[int]:
+    def resolve(kind: str, arg):
+        if kind == "class_of":
+            u = units[arg] if 0 <= arg < n_units else None
+            return u.class_ if u is not None else None
         if kind == "up":
             return up_of(arg)
         if kind == "pop_space":
-            return pop_space_units(arg)
+            return [] if team else pop_space_units(arg)
         if kind == "unit_values":
             return unit_values(*arg)
         if kind == "units":
             return {u for u in custom_bonus.with_forms(set(arg))
                     if u < n_units and units[u] is not None}
         if kind == "uu":
-            return custom_bonus.with_forms({u for u in uu_ids if u >= 0})
+            return set() if team else custom_bonus.with_forms({u for u in uu_ids if u >= 0})
         if kind == "techs":
             return tech_copies(arg)
         if kind == "researched_at":
@@ -3588,7 +3591,7 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
                     and any(tl.unit_id in sites for tl in u.creatable.train_locations)}
             # Only what this civ has — every civ's units sit in the array.  A
             # tree that names nothing (a bare test civ) falls back to all.
-            mine = here & present if present else here
+            mine = here & present if present and not team else here
             return custom_bonus.with_forms(mine)
         return set()
 
@@ -3613,6 +3616,23 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
             out |= by_name.get((t.name, t.language_dll_name), set())
         return out
 
+    return line_of, resolve
+
+
+def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
+                          warnings: list[str], uu_ids: tuple[int, ...] = (),
+                          ut_ids: tuple = ()) -> int:
+    """Build each custom bonus card as its own civ-owned auto-fire tech.
+
+    Each card is its own tech (or several, if it outgrows one Effect), so the
+    ~189-command ceiling never reaches the player.
+    """
+    import custom_bonus
+    cards = card_homes(civ_def)["civ"]
+    if not cards:
+        return 0
+    line_of, resolve = _custom_bonus_resolver(dat, civ_index, civ_def, uu_ids, ut_ids)
+
     # The engine crashes on an Effect over ~189 commands.  A card is ours to
     # split, so a big one becomes several techs, chunked in card order so an
     # add-then-multiply on one stat still applies in that order.
@@ -3622,16 +3642,11 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
         text = custom_bonus.card_text(card)
         cmds = custom_bonus.card_commands(card, line_of, resolve)
         if not cmds:
-            if card["target"].get("id") == "unique_unit":
-                _msg = f"Custom bonus \"{text}\" targets the unique unit, but this civ has none — skipped."
-            elif card["target"].get("id") == "unique_techs":
-                _msg = f"Custom bonus \"{text}\" targets unique techs, but this civ has none — skipped."
-            else:
-                _msg = f"Custom bonus \"{text}\" targets nothing this civ or game version has — skipped."
+            _msg = _empty_card_message("Custom bonus", card)
             print(f"  WARNING: {_msg}")
             warnings.append(_msg)
             continue
-        if card["target"]["type"] == "civ":
+        if custom_bonus.card_family(card) == "civ":
             # Civilization cards build vanilla's own tech shapes (#65): an age
             # gate, or start resources paid once a Town Center exists, the
             # stockpile on a second tech after the first.  See civ_steps.
@@ -3650,6 +3665,172 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
               + (f", split across {parts} techs)" if parts > 1 else ")"))
         applied += 1
     return applied
+
+
+def _empty_card_message(what: str, card: dict) -> str:
+    import custom_bonus
+    text = custom_bonus.card_text(card)
+    ids = {t.get("id") for t in card["targets"]}
+    if ids <= {"unique_unit", "unique_techs"} and "unique_unit" in ids:
+        return f"{what} \"{text}\" targets the unique unit, but this civ has none — skipped."
+    if ids == {"unique_techs"}:
+        return f"{what} \"{text}\" targets unique techs, but this civ has none — skipped."
+    return f"{what} \"{text}\" targets nothing this civ or game version has — skipped."
+
+
+def get_team_cards(civ_def: dict) -> list:
+    """Library cards picked as team bonuses (#54), as stored — normalise before use.
+    The same key in every civ_def shape: draft, saved file and wizard civ_def."""
+    raw = civ_def.get("custom_team_bonuses")
+    return raw if isinstance(raw, list) else []
+
+
+def team_card_texts(civ_def: dict) -> list[str]:
+    """Card text of the team cards the build will apply, for the civ-selection
+    screen's Team Bonus line — all three build routes write that line."""
+    import custom_bonus
+    return [custom_bonus.card_text(c) for c in card_homes(civ_def)["team"]]
+
+
+# Where a library card can be used, in the order that decides which use wins
+# when a civ holds the same card more than once (see card_homes).
+CARD_HOMES = (("civ", "civ bonuses"), ("team", "team bonus"),
+              ("castle_ut", "Castle UT"), ("imperial_ut", "Imperial UT"))
+
+
+def card_homes(civ_def: dict) -> dict:
+    """Every library card this civ uses, by home, exactly as the build applies
+    them — the ONE reader of the four card lists, so the build, the UT stubs and
+    the civ-selection text can't disagree.
+
+    Returns {"civ": [...], "team": [...], "castle_ut": [...], "imperial_ut": [...],
+             "refused": [(home, card, reason)], "duplicates": [(home, card, kept_in)]}.
+
+    A card may live in one home only: the team bonus also applies to us, so a
+    card that is both a civ and a team bonus would fire twice, and multiplied
+    effects compound.  The wizard prevents that; this catches what it can't — a
+    hand-edited file, a draft from before the rule, someone else's civ.  The
+    first use wins, in CARD_HOMES order and then list order (so a card listed
+    twice in one home counts once).  A card is the same card by its library id,
+    or, without one, by content.  Refusals run first, so a tech card refused as
+    a team bonus doesn't take a slot from anywhere."""
+    import custom_bonus
+    raw = {"civ": civ_def.get("custom_bonuses"), "team": get_team_cards(civ_def),
+           "castle_ut": get_ut_cards(civ_def, "castle_ut"),
+           "imperial_ut": get_ut_cards(civ_def, "imperial_ut")}
+    problem = {"civ": lambda c: None, "team": custom_bonus.team_problem,
+               "castle_ut": custom_bonus.ut_problem, "imperial_ut": custom_bonus.ut_problem}
+    out: dict = {"refused": [], "duplicates": []}
+    seen: dict = {}                              # card key -> home it was kept in
+    for home, _label in CARD_HOMES:
+        ok, refused = custom_bonus.placed_cards(raw[home], problem[home])
+        out["refused"] += [(home, c, why) for c, why in refused]
+        kept = []
+        for card in ok:
+            key = custom_bonus.card_key(card)
+            if key in seen:
+                out["duplicates"].append((home, card, seen[key]))
+                continue
+            seen[key] = home
+            kept.append(card)
+        out[home] = kept
+    return out
+
+
+def get_ut_cards(civ_def: dict, which: str) -> list:
+    """Library cards folded into a Custom unique tech (#75), as stored.
+
+    which: 'castle_ut' or 'imperial_ut'.  Only a UT in Build Custom mode has
+    them: the Pick Vanilla grid replaces the UT's effects and hides this list,
+    so cards left over from an earlier visit to Build Custom must not fire.
+    No mode reads as "vanilla", as civ_schema does."""
+    ut = civ_def.get(which)
+    if not isinstance(ut, dict) or ut.get("mode", "vanilla") != "custom":
+        return []
+    raw = ut.get("custom_bonuses")
+    return raw if isinstance(raw, list) else []
+
+
+# Any Effect over ~189 commands crashes the game at startup; ours warn at 185.
+_EFFECT_COMMAND_SOFT_LIMIT = 185
+
+
+def _apply_placed_cards(dat: DatFile, civ_index: int, civ_def: dict, warnings: list[str],
+                        uu_ids: tuple[int, ...], ut_ids: tuple, tb_eff_id: int,
+                        soft_limit: int) -> dict:
+    """Library cards picked as team bonuses (#54) or into a unique tech (#75).
+
+    A unique tech's cards are appended to the tech's own Effect, so they fire
+    when it is researched; _split_oversized_ut, which runs after this, spills
+    any overflow into follow-on techs as it does for the catalog effects.
+
+    Team cards go into the team bonus Effect, which can't be split — the
+    engine reads one Effect id per civ — so a card that would take it past the
+    soft limit is skipped with a warning rather than crashing the game.
+
+    Returns {"team": n applied, "castle_ut": n, "imperial_ut": n}.
+    """
+    import custom_bonus
+    out = {"team": 0, "castle_ut": 0, "imperial_ut": 0}
+    homes = card_homes(civ_def)
+    labels = dict(CARD_HOMES)
+    where = {"civ": "Custom bonus", "team": "Team bonus",
+             "castle_ut": "Castle UT bonus", "imperial_ut": "Imperial UT bonus"}
+    for home, card, why in homes["refused"]:
+        _msg = f"{where[home]} \"{custom_bonus.card_text(card)}\" skipped: {why}"
+        print(f"  WARNING: {_msg}")
+        warnings.append(_msg)
+    for home, card, kept_in in homes["duplicates"]:
+        _msg = (f"{where[home]} \"{custom_bonus.card_text(card)}\" skipped: it's already in your "
+                f"{labels[kept_in]}, and a bonus can only be used once.")
+        print(f"  WARNING: {_msg}")
+        warnings.append(_msg)
+
+    for which, label, tid in (("castle_ut", "Castle UT", ut_ids[0]),
+                              ("imperial_ut", "Imperial UT", ut_ids[1])):
+        cards = homes[which]
+        if not cards:
+            continue
+        if tid is None or not (0 <= tid < len(dat.techs)):
+            continue                      # no UT tech — _append_unique_tech_stubs makes one for cards
+        line_of, resolve = _custom_bonus_resolver(dat, civ_index, civ_def, uu_ids, ut_ids)
+        eff = dat.effects[dat.techs[tid].effect_id]
+        for card in cards:
+            cmds = custom_bonus.card_commands(card, line_of, resolve)
+            if not cmds:
+                _msg = _empty_card_message(f"{label} bonus", card)
+                print(f"  WARNING: {_msg}")
+                warnings.append(_msg)
+                continue
+            # Civ-gated by the tech itself: only this civ researches it.
+            eff.effect_commands = [*eff.effect_commands, *cmds]
+            out[which] += 1
+            print(f"       {label} bonus: {custom_bonus.card_text(card)} ({len(cmds)} cmds)")
+
+    cards = homes["team"]
+    if cards:
+        line_of, resolve = _custom_bonus_resolver(dat, civ_index, civ_def, team=True)
+        eff = dat.effects[tb_eff_id]
+        for card in cards:
+            text = custom_bonus.card_text(card)
+            cmds = custom_bonus.card_commands(card, line_of, resolve)
+            if not cmds:
+                _msg = _empty_card_message("Team bonus", card)
+                print(f"  WARNING: {_msg}")
+                warnings.append(_msg)
+                continue
+            have = len(eff.effect_commands)
+            if have + len(cmds) > soft_limit:
+                _msg = (f"Team bonus \"{text}\" skipped: it needs {len(cmds)} effect commands and "
+                        f"the team bonus already has {have} (limit {soft_limit}). Every team bonus "
+                        f"shares one effect the game can't split — drop a team bonus or narrow this card.")
+                print(f"  WARNING: {_msg}")
+                warnings.append(_msg)
+                continue
+            eff.effect_commands = [*eff.effect_commands, *cmds]
+            out["team"] += 1
+            print(f"       Team bonus: {text} ({len(cmds)} cmds)")
+    return out
 
 
 def _blacksmith_tech_ids(dat: DatFile) -> list[int]:
@@ -5080,19 +5261,53 @@ def get_team_bonuses(civ_def: dict) -> list:
     raw = civ_def.get("bonuses") or []
     return raw[4] if len(raw) > 4 and isinstance(raw[4], list) else []
 
+# The Castle and Imperial preset pools number their techs independently — castle
+# preset 1 is tech 578, imperial preset 1 is tech 579 — so a preset id means
+# nothing without its pool.  Either slot may draw from either pool (a Castle UT
+# can be an Imperial preset, firing in the Castle Age), so every UT entry
+# carries its pool as a third element; an entry without one is from the slot's
+# own pool, which is every civ saved before the pools merged and every KM file.
+UT_SLOT_TIER = {"castle_ut": "castle", "imperial_ut": "imperial"}
+UT_TIERS = ("castle", "imperial")
+
+
+def _norm_ut_entry(e, default_tier: str) -> list | None:
+    """{"id", "multiplier", "tier"} or [id, mult(, tier)] -> [id, mult, tier]."""
+    try:
+        if isinstance(e, dict):
+            bid, mult, tier = int(e["id"]), int(e.get("multiplier", 1)), e.get("tier")
+        elif isinstance(e, (list, tuple)) and e:
+            bid = int(e[0])
+            mult = int(e[1]) if len(e) > 1 else 1
+            tier = e[2] if len(e) > 2 else None
+        else:
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    return [bid, mult, tier if tier in UT_TIERS else default_tier]
+
+
+def ut_source_tech(bonus_id: int, tier: str) -> int | None:
+    """The vanilla tech a UT preset copies, from its own pool."""
+    pool = _KM_CASTLE_UT_TECHS if tier == "castle" else _KM_IMP_UT_TECHS
+    return pool.get(int(bonus_id))
+
+
 def get_ut_entries(civ_def: dict, which: str) -> list:
-    """Return UT bonus entries as [[id, mult], ...].
+    """Return UT bonus entries as [[id, mult, tier], ...] — see UT_SLOT_TIER.
 
     which: 'castle_ut' or 'imperial_ut'
     Wizard format: civ_def[which]["effects"] list of dicts.
     Old KM format: bonuses[2] for castle, bonuses[3] for imperial.
     """
+    default = UT_SLOT_TIER[which]
     if which in civ_def:
-        ut = civ_def[which] or {}
-        return [_norm_entry(e) for e in ut.get("effects", [])]
-    raw = civ_def.get("bonuses") or []
-    idx = 2 if which == "castle_ut" else 3
-    return raw[idx] if len(raw) > idx and isinstance(raw[idx], list) else []
+        raw_list = (civ_def[which] or {}).get("effects", [])
+    else:
+        raw = civ_def.get("bonuses") or []
+        idx = 2 if which == "castle_ut" else 3
+        raw_list = raw[idx] if len(raw) > idx and isinstance(raw[idx], list) else []
+    return [n for n in (_norm_ut_entry(e, default) for e in raw_list) if n is not None]
 
 def get_km_uu_index(civ_def: dict) -> int | None:
     """Return KM UU index from either format, or None if absent."""
@@ -6355,6 +6570,13 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     # 4. Castle UT and Imperial UT.
     castle_ut_entries   = get_ut_entries(civ_def, "castle_ut")
     imperial_ut_entries = get_ut_entries(civ_def, "imperial_ut")
+    # A Custom UT made only of library cards (#75) has no catalog entries but
+    # still needs its tech; _apply_placed_cards fills it in at step 7a.
+    # card_homes, not the raw lists: a UT whose only card is a duplicate or a
+    # refused card would otherwise get a tech with nothing in it.
+    _homes = card_homes(civ_def)
+    castle_ut_has_cards   = bool(_homes["castle_ut"])
+    imperial_ut_has_cards = bool(_homes["imperial_ut"])
     _ut_pool_base      = UT_POOL_OFFSET      + civ_index * UT_POOL_SLOTS_PER_CIV
     _ut_help_pool_base = UT_HELP_POOL_OFFSET + civ_index * UT_HELP_SLOTS_PER_CIV
     castle_ut_sid      = _campaign_sid(_ut_pool_base + 0)
@@ -6371,7 +6593,7 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     imp_ut_pending_uu_subs:    list = []
     castle_ut_pending_base_uu_subs: list = []
     imp_ut_pending_base_uu_subs:    list = []
-    if castle_ut_entries or imperial_ut_entries:
+    if castle_ut_entries or imperial_ut_entries or castle_ut_has_cards or imperial_ut_has_cards:
         (castle_ut_sid, imp_ut_sid, castle_ut_tech_id, imp_ut_tech_id,
          castle_ut_desc_sid, imp_ut_desc_sid,
          castle_ut_help_sid, imp_ut_help_sid,
@@ -6380,7 +6602,8 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
          _ut_warnings) = (
             _append_unique_tech_stubs(
                 dat, civ_index, alias,
-                castle_ut_entries, imperial_ut_entries)
+                castle_ut_entries, imperial_ut_entries,
+                castle_ut_has_cards, imperial_ut_has_cards)
         )
         warnings.extend(_ut_warnings)
 
@@ -6613,10 +6836,14 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     bonus_results["extra_unit_strings"].extend(km_uu_custom_unit_strings)
     bonus_results.setdefault("extra_tech_strings", []).extend(km_uu_extra_tech_strings)
 
-    # 7a. Player-composed bonus cards — one auto-fire tech each.
+    # 7a. Player-composed bonus cards — one auto-fire tech each — and the
+    #     library cards picked as team bonuses or into a Custom UT.
     bonus_results["custom_applied"] = _apply_custom_bonuses(
         dat, civ_index, civ_def, warnings, (uu_id, elite_uu_id),
         (castle_ut_tech_id, imp_ut_tech_id))
+    bonus_results["placed_cards"] = _apply_placed_cards(
+        dat, civ_index, civ_def, warnings, (uu_id, elite_uu_id),
+        (castle_ut_tech_id, imp_ut_tech_id), tb_eff_id, _EFFECT_COMMAND_SOFT_LIMIT)
 
     # 8. Language audio is handled in a single batch call to assign_all_languages()
     #    after all civs are processed — see app.py / build_all.py.
@@ -6655,7 +6882,6 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     # Two of ours accumulate without bound — the tech tree effect (a command per
     # unticked node) and the team bonus effect (every picked team bonus merged
     # into one) — so both are checked against the same soft limit.
-    _EFFECT_COMMAND_SOFT_LIMIT = 185
     _tt_cmd_count = len(dat.effects[tt_eff_id].effect_commands)
     if _tt_cmd_count > _EFFECT_COMMAND_SOFT_LIMIT:
         # Surfaced to the user, not just the console: the tree sweep now emits a
@@ -6914,14 +7140,14 @@ def _donjon_like_keep(cmds: list) -> list:
 
 
 def _build_ut_effect_cmds(dat: DatFile, entries: list, label: str,
-                          lookup: dict[int, int]) -> tuple[list, list, list]:
+                          default_tier: str) -> tuple[list, list, list]:
     """Collect effect commands for a UT's bonus entries.
 
-    `entries` is bonuses[2] (castle) or bonuses[3] (imperial) from the KM JSON.
-    `lookup` maps KM bonus_id → vanilla DAT tech ID; pass _KM_CASTLE_UT_TECHS or
-    _KM_IMP_UT_TECHS depending on which slot is being built. We then deep-copy
-    that tech's effect commands into our new UT stub so research actually fires
-    the right behavior. Previously this called civ_bonus_techs() which uses an
+    `entries` is get_ut_entries' [id, mult, tier]; each preset is looked up in
+    ITS OWN pool (ut_source_tech), which need not be the slot's — a Castle UT
+    may be an Imperial preset.  An entry with no tier is from `default_tier`,
+    the slot's own pool.  We then copy that tech's effect commands into
+    our new UT stub so research actually fires the right behavior. Previously this called civ_bonus_techs() which uses an
     entirely different bonus-ID namespace and produced wrong effects (e.g.
     Stirrups would research Britons' "Castle 15% cheaper" tech).
 
@@ -6943,13 +7169,13 @@ def _build_ut_effect_cmds(dat: DatFile, entries: list, label: str,
     pending_elite_uu_subs: list = []
     pending_base_uu_subs: list  = []
     for entry in entries:
-        if not isinstance(entry, (list, tuple)) or len(entry) < 1:
+        entry = _norm_ut_entry(entry, default_tier)
+        if entry is None:
             continue
-        bonus_id   = int(entry[0])
-        multiplier = int(entry[1]) if len(entry) > 1 else 1
-        tech_id    = lookup.get(bonus_id)
+        bonus_id, multiplier, tier = entry
+        tech_id    = ut_source_tech(bonus_id, tier)
         if tech_id is None:
-            print(f"       {label} bonus {bonus_id}: not in UT catalog — skipped")
+            print(f"       {label} bonus {bonus_id} ({tier} pool): not in UT catalog — skipped")
             continue
         if tech_id < 0 or tech_id >= len(dat.techs):
             continue
@@ -7047,6 +7273,8 @@ def _build_ut_effect_cmds(dat: DatFile, entries: list, label: str,
 def _append_unique_tech_stubs(dat: DatFile, civ_index: int, alias: str,
                                castle_ut_entries: list,
                                imperial_ut_entries: list,
+                               castle_has_cards: bool = False,
+                               imperial_has_cards: bool = False,
                                ) -> tuple[int, int, int | None, int | None, int, int,
                                           int, int, list, list, list, list]:
     """Create Castle UT (btn7) and Imperial UT (btn8) from bonus catalog entries.
@@ -7070,9 +7298,11 @@ def _append_unique_tech_stubs(dat: DatFile, civ_index: int, alias: str,
     help_pool_base = UT_HELP_POOL_OFFSET + civ_index * UT_HELP_SLOTS_PER_CIV
     ut_configs = [
         (7,  "Castle UT",   102, castle_ut_entries,   300, 3, 300,  33,
-         _campaign_sid(pool_base + 0), _campaign_sid(help_pool_base + 0), _KM_CASTLE_UT_TECHS),
+         _campaign_sid(pool_base + 0), _campaign_sid(help_pool_base + 0),
+         castle_has_cards),
         (8,  "Imperial UT", 103, imperial_ut_entries, 450, 2, 225, 107,
-         _campaign_sid(pool_base + 1), _campaign_sid(help_pool_base + 1), _KM_IMP_UT_TECHS),
+         _campaign_sid(pool_base + 1), _campaign_sid(help_pool_base + 1),
+         imperial_has_cards),
     ]
     used_name_sids: list[int] = []
     used_desc_sids: list[int] = []
@@ -7082,7 +7312,7 @@ def _append_unique_tech_stubs(dat: DatFile, civ_index: int, alias: str,
     pending_base_subs_per_slot: list[list] = []
     ut_warnings: list[str] = []
     for (btn, label, age_req, entries, cost_food, cost_b_type, cost_b, icon,
-         name_sid, help_sid, ut_lookup) in ut_configs:
+         name_sid, help_sid, has_cards) in ut_configs:
         # String slots for a UT, and what each one actually drives.  For civ 24's
         # Castle UT the concrete ids are:
         #
@@ -7108,21 +7338,21 @@ def _append_unique_tech_stubs(dat: DatFile, civ_index: int, alias: str,
         used_name_sids.append(name_sid)
         used_desc_sids.append(desc_sid)
         used_help_sids.append(help_sid)
-        if not entries:
+        if not entries and not has_cards:
             used_tech_ids.append(None)
             pending_subs_per_slot.append([])
             pending_base_subs_per_slot.append([])
             continue
         cmds, pending_uu_subs, pending_base_uu_subs = _build_ut_effect_cmds(
-            dat, entries, label, ut_lookup)
+            dat, entries, label, "castle" if btn == 7 else "imperial")
         eff_id = _append_effect(dat, Effect(name=f"{alias} {label}", effect_commands=cmds))
         pending_subs_per_slot.append([(eff_id, ec) for ec in pending_uu_subs])
         pending_base_subs_per_slot.append([(eff_id, ec) for ec in pending_base_uu_subs])
         # Copy hotkey from first entry's vanilla tech so S/D keys work in-game.
         hotkey = -1
-        if entries and isinstance(entries[0], (list, tuple)) and entries[0]:
-            src_slot = int(entries[0][0])
-            src_tid  = ut_lookup.get(src_slot)
+        first = _norm_ut_entry(entries[0], "castle" if btn == 7 else "imperial") if entries else None
+        if first is not None:
+            src_tid  = ut_source_tech(first[0], first[2])
             if src_tid is not None and 0 <= src_tid < len(dat.techs):
                 src_locs = getattr(dat.techs[src_tid], 'research_locations', [])
                 if src_locs:

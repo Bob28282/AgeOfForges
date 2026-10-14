@@ -42,7 +42,7 @@ from build_civ import (
 )
 from civ_appender import (
     patch_civilizations_list,
-    apply_civ, assign_all_languages, get_civ_bonuses, get_team_bonuses,
+    apply_civ, assign_all_languages, get_civ_bonuses, get_team_bonuses, team_card_texts, card_homes,
     get_km_uu_index, _KM_UU_NAMES,
 )
 from civ_overrides import (_apply_uu_overrides, _apply_hero_unit, _override_ut_costs,
@@ -64,12 +64,14 @@ def _draft_to_civ_def(draft: dict) -> dict:
     km_idx   = uu.get("km_idx")
     uu_slot  = [km_idx] if km_idx is not None else []
 
+    # [id, mult, pool]: either slot may hold either pool's presets, and the
+    # preset ids only mean something within their pool (civ_appender.UT_SLOT_TIER).
     castle_effects = [
-        [e["id"], e.get("multiplier", 1)]
+        [e["id"], e.get("multiplier", 1), e.get("tier") or "castle"]
         for e in (draft.get("castle_ut") or {}).get("effects", [])
     ]
     imp_effects = [
-        [e["id"], e.get("multiplier", 1)]
+        [e["id"], e.get("multiplier", 1), e.get("tier") or "imperial"]
         for e in (draft.get("imperial_ut") or {}).get("effects", [])
     ]
 
@@ -105,7 +107,18 @@ def _draft_to_civ_def(draft: dict) -> dict:
         "button_moves":          draft.get("button_moves") or [],
         # Player-composed cards — civ_appender._apply_custom_bonuses.
         "custom_bonuses":        draft.get("custom_bonuses") or [],
+        # Library cards picked as team bonuses (#54) — _apply_placed_cards.
+        "custom_team_bonuses":   draft.get("custom_team_bonuses") or [],
     }
+    # A Custom UT's library cards (#75), read by civ_appender.get_ut_cards.  The
+    # same shape the draft and saved files use; `effects` mirrors bonuses[2]/[3]
+    # so get_ut_entries reads the same list on either branch.
+    for key, effects in (("castle_ut", castle_effects), ("imperial_ut", imp_effects)):
+        ut = draft.get(key) or {}
+        if ut.get("custom_bonuses"):
+            civ_def[key] = {"mode": ut.get("mode", "vanilla"),
+                            "effects": [{"id": e[0], "multiplier": e[1], "tier": e[2]} for e in effects],
+                            "custom_bonuses": ut["custom_bonuses"]}
 
     # UU name/description override — passed under unique_unit so km_custom_uu can
     # pick it up for custom presets; vanilla UU names come from the DAT.
@@ -257,7 +270,7 @@ def build_wizard_mod(draft: dict, dat_path: str, replace_civ: str) -> bytes:
         mult = entry[1] if len(entry) > 1 else 1
         if txt:
             bullets.append(f"• {txt}" + (f" [x{mult}]" if mult > 1 else ""))
-    for card in custom_bonus.normalize(civ_def.get("custom_bonuses")):
+    for card in card_homes(civ_def)["civ"]:
         bullets.append(f"• {_kv_text(custom_bonus.card_text(card))}")
     desc_parts.append("\\n".join(bullets))
     desc_parts.append(f"\\n\\n<b>Unique Unit:<b> \\n{uu_display}")
@@ -274,18 +287,17 @@ def build_wizard_mod(draft: dict, dat_path: str, replace_civ: str) -> bytes:
                             (imp_ut_name, imp_ut_desc_text))
         )
     )
-    if team_entries:
-        # Team bonus ids are their own namespace, not civ bonus ids — every one
-        # of the 83 resolves to different text in _BONUS_NAMES, and none are
-        # missing, so reading the civ table here printed a confidently wrong
-        # team bonus on the civ-selection screen with nothing to make it obvious.
-        tb_lines = [
-            _TEAM_BONUS_NAMES.get(str(e[0]), "")
-            for e in team_entries if isinstance(e, list)
-        ]
-        tb_lines = [t for t in tb_lines if t]
-        if tb_lines:
-            desc_parts.append(f"\\n\\n<b>Team Bonus:<b> \\n{'; '.join(tb_lines)}")
+    # Team bonus ids are their own namespace, not civ bonus ids — every one
+    # of the 83 resolves to different text in _BONUS_NAMES, and none are
+    # missing, so reading the civ table here printed a confidently wrong
+    # team bonus on the civ-selection screen with nothing to make it obvious.
+    tb_lines = [
+        _TEAM_BONUS_NAMES.get(str(e[0]), "")
+        for e in team_entries if isinstance(e, list)
+    ]
+    tb_lines = [t for t in tb_lines if t] + [_kv_text(t) for t in team_card_texts(civ_def)]
+    if tb_lines:
+        desc_parts.append(f"\\n\\n<b>Team Bonus:<b> \\n{'; '.join(tb_lines)}")
     full_desc = "".join(desc_parts)
     while full_desc.endswith("\\n") or full_desc.endswith(" "):
         full_desc = full_desc[:-2] if full_desc.endswith("\\n") else full_desc.rstrip()

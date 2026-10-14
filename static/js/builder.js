@@ -211,19 +211,16 @@ function validateStep(n) {
   if (n === 6 || n === 7) {
     const { key, prefix } = UT_STEPS[n];
     const ut = draft[key] || {};
-    // Vanilla mode with a tech selected is always valid (name populates on grid render)
-    if ((ut.mode || "vanilla") === "vanilla" && ut.vanilla_km_idx != null) {
-      document.getElementById(`${prefix}-name`)?.classList.remove("is-invalid");
-    } else {
-      const utName = document.getElementById(`${prefix}-name`)?.value.trim() || ut.name || "";
-      if (!utName) {
-        const el = document.getElementById(`${prefix}-name`);
-        el?.classList.add("is-invalid");
-        el?.focus();
-        return false;
-      }
-      document.getElementById(`${prefix}-name`)?.classList.remove("is-invalid");
+    // A pick fills the name in (_utChange); only a UT of library cards alone,
+    // or one the player cleared, can arrive here without one.
+    const utName = document.getElementById(`${prefix}-name`)?.value.trim() || ut.name || "";
+    if (!utName) {
+      const el = document.getElementById(`${prefix}-name`);
+      el?.classList.add("is-invalid");
+      el?.focus();
+      return false;
     }
+    document.getElementById(`${prefix}-name`)?.classList.remove("is-invalid");
   }
   return true;
 }
@@ -808,11 +805,16 @@ function populateReview() {
   ].join("") || "<li class='text-muted small fst-italic'>None</li>";
 
   const tbs = draft.team_bonuses || [];
-  const tbLabel = tbs.length
-    ? `<ul class="mb-0 ps-3">${tbs.map(tb => {
-        const lbl = (_teamCatalog.find(c => c.id === tb.id) || {}).label || `Bonus #${tb.id}`;
-        return `<li class="small">${lbl}</li>`;
-      }).join("")}</ul>`
+  const tbItems = [
+    ...tbs.map(tb => {
+      const lbl = (_teamCatalog.find(c => c.id === tb.id) || {}).label || `Bonus #${tb.id}`;
+      return `<li class="small">${lbl}</li>`;
+    }),
+    ...(draft.custom_team_bonuses || []).map(c =>
+      `<li class="small">${cbEsc(cbCardText(c))} <span class='text-muted'>(custom)</span></li>`),
+  ];
+  const tbLabel = tbItems.length
+    ? `<ul class="mb-0 ps-3">${tbItems.join("")}</ul>`
     : "<em class='text-muted'>None</em>";
 
   // ── Hero Unit ───────────────────────────────────────────────────────────
@@ -845,11 +847,20 @@ function populateReview() {
   function utSection(key, label) {
     const ut = draft[key];
     if (!ut?.name) return `<div class="text-muted small fst-italic">Not set</div>`;
-    const utCat = key === "castle_ut" ? _castleUtCatalog : _imperialUtCatalog;
-    const fx = (ut.effects || []).map(e => {
-      const lbl = (utCat.find(c => c.id === e.id) || {}).label || `Effect #${e.id}`;
-      return `<li class="small">${lbl}${e.multiplier > 1 ? ` ×${e.multiplier}` : ""}</li>`;
-    }).join("") || "<li class='text-muted small fst-italic'>No effects</li>";
+    const own = key === "castle_ut" ? "castle" : "imperial";
+    const fx = [
+      ...(ut.effects || []).map(e => {
+        // Each pick from its own pool — the ids clash between them.
+        const tier = e.tier === "castle" || e.tier === "imperial" ? e.tier : own;
+        const lbl = (_utCatalogOf(tier).find(c => c.id === e.id) || {}).label || `Effect #${e.id}`;
+        const from = tier !== own ? ` <span class='text-muted'>(${tier === "castle" ? "Castle" : "Imperial"} Age tech)</span>` : "";
+        return `<li class="small">${lbl}${e.multiplier > 1 ? ` ×${e.multiplier}` : ""}${from}</li>`;
+      }),
+      // Library cards apply only with mode "custom", as the build reads them;
+      // _utChange derives the mode, so a UT holding cards always has it.
+      ...(ut.mode === "custom" ? (ut.custom_bonuses || []) : []).map(c =>
+        `<li class="small">${cbEsc(cbCardText(c))} <span class='text-muted'>(custom)</span></li>`),
+    ].join("") || "<li class='text-muted small fst-italic'>No effects</li>";
     return `
       <div class="fw-semibold small">${ut.name}</div>
       <div class="small text-muted">${_costStr(ut.cost)} &nbsp;·&nbsp; ${ut.time ?? 60}s</div>
@@ -2030,51 +2041,24 @@ async function loadUTCatalog() {
   }
 }
 
-// Shared search + results logic for both civ and team pickers
-function wireSearchPicker({ inputId, resultsId, catalog, onSelect }) {
-  const input   = document.getElementById(inputId);
-  const results = document.getElementById(resultsId);
-
-  input.addEventListener("input", () => {
-    const q = input.value.trim().toLowerCase();
-    if (!q) { results.classList.add("d-none"); results.innerHTML = ""; return; }
-
-    const matches = catalog
-      .filter(b => b.label.toLowerCase().includes(q))
-      .slice(0, 40);
-
-    if (!matches.length) {
-      results.innerHTML = `<div class="bonus-result-item text-muted">No results for "${q}"</div>`;
-    } else {
-      results.innerHTML = matches.map(b =>
-        `<div class="bonus-result-item" data-id="${b.id}">${b.label}</div>`
-      ).join("");
-      results.querySelectorAll(".bonus-result-item[data-id]").forEach(el => {
-        el.addEventListener("click", () => {
-          onSelect(parseInt(el.dataset.id, 10), el.textContent);
-          input.value = "";
-          results.classList.add("d-none");
-          results.innerHTML = "";
-        });
-      });
-    }
-    results.classList.remove("d-none");
-  });
-
-  // Close results when clicking outside
-  document.addEventListener("click", e => {
-    if (!input.contains(e.target) && !results.contains(e.target)) {
-      results.classList.add("d-none");
-    }
-  }, true);
-}
 
 // Cards ported from the Chronicles civs carry a small helmet badge.  Both card
-// renderers (the bulk grid and _makeBonusCardEl) must call this.
+// renderers (the bulk grid and _makeBonusCardEl) must call this.  Its
+// explanation is in the card's tooltip (_bonusTipAttrs), not a title.
 function _chroniclesBadge(p) {
   return p.chronicles
-    ? `<img class="chronicles-badge" src="/static/gladiator-helmet.png" alt="Chronicles" title="From the Chronicles civilizations">`
+    ? `<img class="chronicles-badge" src="/static/gladiator-helmet.png" alt="Chronicles">`
     : '';
+}
+
+// The hover tooltip (tooltip.js) for a vanilla bonus card: the category as
+// its heading, the full bonus text below — the card face has room for only a
+// shortened version.  Replaces the card's old `title`.
+function _bonusTipAttrs(c, cat, p, team) {
+  const catLabel = cat.key.charAt(0).toUpperCase() + cat.key.slice(1);
+  const lines = [c.label];
+  if (p.chronicles) lines.push("From the Chronicles civilizations.");
+  return `data-tip-title="${_esc(`${catLabel} · ${team ? "Team bonus" : "Civilization bonus"}`)}" data-tip="${_esc(lines.join("\n"))}"`;
 }
 
 function _makeBonusCardEl(c, mult, isSelected, toggleFn, getDraftEntry, prefix = '') {
@@ -2088,7 +2072,8 @@ function _makeBonusCardEl(c, mult, isSelected, toggleFn, getDraftEntry, prefix =
   el.dataset.bonusId = idStr;
   el.dataset.cat     = cat.key;
   el.style.cssText   = `--cat-color:var(--cat-${cat.key});`;
-  el.title           = c.label.replace(/"/g, '&quot;');
+  el.dataset.tipTitle = `${cat.key.charAt(0).toUpperCase() + cat.key.slice(1)} · ${prefix === 'T' ? "Team bonus" : "Civilization bonus"}`;
+  el.dataset.tip      = [c.label, ...(p.chronicles ? ["From the Chronicles civilizations."] : [])].join("\n");
   el.innerHTML       = `${_renderBonusCardInner(p, cat, mult)}${_chroniclesBadge(p)}<div class="card-shadow"></div><div class="top-corners"></div><div class="bottom-corners"></div>`;
   // Use c.id directly in closures — no need to parse data-bonus-id
   el.addEventListener('click', e => {
@@ -2194,7 +2179,7 @@ function _buildGridHtml(catalog, selIds, bonuses, q, idPrefix) {
     if (visible) anyVisible = true;
     const typeClass = p.type !== 'value' ? ` ${p.type}-bonus` : '';
     const styleAttr = `--cat-color:var(--cat-${cat.key})${visible ? '' : ';display:none'}`;
-    const html = `<div class="bonus-card${sel ? ' selected' : ''}${typeClass}" data-bonus-id="${idStr}" data-cat="${cat.key}" style="${styleAttr}" title="${c.label.replace(/"/g, '&quot;')}">${_renderBonusCardInner(p, cat, mult)}${_chroniclesBadge(p)}<div class="card-shadow"></div><div class="top-corners"></div><div class="bottom-corners"></div></div>`;
+    const html = `<div class="bonus-card${sel ? ' selected' : ''}${typeClass}" data-bonus-id="${idStr}" data-cat="${cat.key}" style="${styleAttr}" ${_bonusTipAttrs(c, cat, p, idPrefix === 'T')}>${_renderBonusCardInner(p, cat, mult)}${_chroniclesBadge(p)}<div class="card-shadow"></div><div class="top-corners"></div><div class="bottom-corners"></div></div>`;
     if (sel) selHtml += html;
     else availHtml += html;
   }
@@ -2306,74 +2291,222 @@ function _updateBonusCountBadge() {
 // That leaves two states worth surfacing: the library card changed after the
 // civ copied it, and the civ carries a card this library has never seen (it
 // came in with someone else's civ).
+//
+// A card has three homes: the civ's own bonuses (step 3), its team bonus (step
+// 4, #54) and a Build Custom unique tech (steps 6/7, #75).  The last two refuse
+// some cards (cbTeamProblem / cbUtProblem — the build enforces the same); those
+// show greyed out with the reason, and can still be unticked if a civ has one.
 let _cbLibrary = [];
 
-async function renderCustomBonusPicker() {
-  const list = document.getElementById("cb-pick-list");
-  if (!list) return;
+const CB_HOMES = {
+  civ: {
+    listId: "cb-pick-list",
+    read:  () => draft.custom_bonuses || [],
+    write: a => { draft.custom_bonuses = a; },
+    problem: () => "",
+  },
+  team: {
+    listId: "cb-team-pick-list",
+    read:  () => draft.custom_team_bonuses || [],
+    write: a => { draft.custom_team_bonuses = a; },
+    problem: c => cbTeamProblem(c),
+  },
+  castle: {
+    listId: "cut-cb-pick-list",
+    read:  () => draft.castle_ut?.custom_bonuses || [],
+    write: a => _utChange(6, ut => { ut.custom_bonuses = a; }),
+    problem: c => cbUtProblem(c),
+    full:  () => _utUsed(draft.castle_ut) >= MAX_UT_EFFECTS,
+  },
+  imperial: {
+    listId: "iut-cb-pick-list",
+    read:  () => draft.imperial_ut?.custom_bonuses || [],
+    write: a => _utChange(7, ut => { ut.custom_bonuses = a; }),
+    problem: c => cbUtProblem(c),
+    full:  () => _utUsed(draft.imperial_ut) >= MAX_UT_EFFECTS,
+  },
+};
+
+async function renderCustomBonusPicker(reload = true) {
   await cbLoadCatalog();
-  _cbLibrary = await cbLoadLibrary();
-  const picked = draft.custom_bonuses || [];
+  if (reload) _cbLibrary = await cbLoadLibrary();
+  _renderAllCardHomes();
+}
+
+function _renderAllCardHomes() {
+  for (const key of Object.keys(CB_HOMES)) _renderCardHome(key);
+}
+
+// One card, one home: a bonus picked in one place can't be picked in another
+// (the team bonus also applies to us, so a civ + team bonus would fire twice).
+// Elsewhere it shows greyed with where it is and a "Move here" button.  The
+// build enforces the same rule (civ_appender.card_homes), in this order.
+const CB_HOME_ORDER  = ["civ", "team", "castle", "imperial"];
+const CB_HOME_LABELS = { civ: "civ bonuses", team: "team bonus", castle: "Castle UT", imperial: "Imperial UT" };
+
+// Same card: library id, or content for a card with none (civ_appender's card_key).
+function _cbSameCopy(a, b) {
+  return a.id || b.id ? a.id === b.id : cbSameCard(a, b);
+}
+
+// The other home holding this card, earliest first, or null.
+function _cbHomeOf(card, exceptKey) {
+  return CB_HOME_ORDER.find(k => k !== exceptKey && CB_HOMES[k].read().some(p => _cbSameCopy(p, card))) || null;
+}
+
+function _renderCardHome(key) {
+  const home = CB_HOMES[key];
+  const list = document.getElementById(home.listId);
+  if (!list) return;
+  const picked = home.read();
   const libIds = new Set(_cbLibrary.map(c => c.id));
 
-  const row = (card, state) => {
+  // Each library bonus is drawn as a bonus card (cbCardHtml).  A refused card
+  // says why, and so does every unticked card once the home is full; ticked
+  // cards stay clickable either way, so they can always be removed.
+  const full = () => home.full?.();
+  const cardHtml = (card, state) => {
     const sel = state !== "available";
-    const extra = {
+    const elsewhere = _cbHomeOf(card, key);
+    const refused = home.problem(card);
+    let why = "", move = false;
+    if (!sel) {
+      if (refused) {
+        // Unable to move: it can't go here at all.
+        why = elsewhere ? `${refused} It stays in your ${CB_HOME_LABELS[elsewhere]}.` : refused;
+      } else if (elsewhere) {
+        why = full() ? `In use in your ${CB_HOME_LABELS[elsewhere]}. This tech is full — remove one to move it here.`
+                     : `In use in your ${CB_HOME_LABELS[elsewhere]}.`;
+        move = !full();
+      } else if (full()) {
+        why = `This tech already holds ${MAX_UT_EFFECTS} techs and custom bonuses — remove one to add this.`;
+      }
+    } else if (refused) {
+      why = refused;
+    } else if (elsewhere && CB_HOME_ORDER.indexOf(elsewhere) < CB_HOME_ORDER.indexOf(key)) {
+      // A duplicate from before this rule (or a hand-edited file): the build
+      // keeps the earlier one, so say which, and let it be unticked here.
+      why = `Also in your ${CB_HOME_LABELS[elsewhere]} — only that one is built. Untick one.`;
+    }
+    const off = !!why && !sel;
+    const actions = move
+      ? `<div class="cb-card-move"><button type="button" class="btn btn-sm btn-outline-secondary cb-move" data-from="${elsewhere}">Move here</button></div>`
+      : {
       stale:   `<button type="button" class="btn btn-sm btn-link cb-refresh" title="Use the library's current version">Library version changed · update</button>`,
       foreign: `<button type="button" class="btn btn-sm btn-link cb-adopt" title="Add it to your library">Save to library</button>`,
     }[state] || "";
-    return `<div class="cb-row cb-pick${sel ? " selected" : ""}" data-id="${cbEsc(card.id || "")}" role="button" tabindex="0" aria-pressed="${sel}">
-      <i class="fa-${sel ? "solid fa-square-check" : "regular fa-square"} cb-row-icon"></i>
-      <span class="cb-row-text">${cbEsc(cbCardText(card))}</span>
-      ${extra}
-    </div>`;
+    return cbCardHtml(card, {
+      selected: sel, off, why: off || (sel && why) ? why : "", actions,
+      extraClass: move ? "cb-card--moveable" : "",
+      attrs: `data-id="${cbEsc(card.id || "")}" role="button" tabindex="${off ? -1 : 0}" aria-pressed="${sel}"${off ? ' aria-disabled="true"' : ""}`,
+    });
   };
 
-  const html = [];
+  const sel = [], avail = [];
   for (const card of _cbLibrary) {
     const mine = picked.find(p => p.id === card.id);
-    html.push(row(mine || card, !mine ? "available" : cbSameCard(mine, card) ? "selected" : "stale"));
+    if (mine) sel.push(cardHtml(mine, cbSameCard(mine, card) ? "selected" : "stale"));
+    else avail.push(cardHtml(card, "available"));
   }
   for (const card of picked) {
-    if (!card.id || !libIds.has(card.id)) html.push(row(card, "foreign"));
+    if (!card.id || !libIds.has(card.id)) sel.push(cardHtml(card, "foreign"));
   }
-  list.innerHTML = html.join("") ||
-    `<div class="text-muted small fst-italic">Your library is empty — create a bonus to use it here.</div>`;
+  // Picks move to the front; _flipCards slides each card from where it was.
+  _flipCards(list, () => {
+    list.innerHTML = sel.length || avail.length
+      ? sel.join("") + avail.join("")
+      : `<div class="text-muted small fst-italic">Your library is empty — create a bonus to use it here.</div>`;
+  });
+  const count = document.getElementById(`${home.listId}-count`);
+  if (count) {
+    count.textContent = _cbLibrary.length || picked.length
+      ? `${picked.length ? `${picked.length} selected` : "none selected"} · ${_cbLibrary.length} in your library`
+      : "";
+  }
 
-  list.querySelectorAll(".cb-pick").forEach(el => {
+  // A change here can change what the other homes may take, so redraw them all.
+  const save = arr => { home.write(arr); saveDraft(); _renderAllCardHomes(); };
+  list.querySelectorAll(".cb-card[data-id]").forEach(el => {
     const id = el.dataset.id;
     const toggle = () => {
-      if (!draft.custom_bonuses) draft.custom_bonuses = [];
-      const at = draft.custom_bonuses.findIndex(p => (p.id || "") === id);
-      if (at >= 0) draft.custom_bonuses.splice(at, 1);
-      else draft.custom_bonuses.push(JSON.parse(JSON.stringify(_cbLibrary.find(c => c.id === id))));
-      saveDraft();
-      renderCustomBonusPicker();
+      const arr = [...home.read()];
+      const at = arr.findIndex(p => (p.id || "") === id);
+      if (at >= 0) arr.splice(at, 1);
+      else {
+        const card = _cbLibrary.find(c => c.id === id);
+        if (!card || home.problem(card) || home.full?.() || _cbHomeOf(card, key)) return;
+        arr.push(JSON.parse(JSON.stringify(card)));
+      }
+      save(arr);
     };
     el.addEventListener("click", e => { if (!e.target.closest("button")) toggle(); });
     el.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(); } });
+    el.querySelector(".cb-move")?.addEventListener("click", () => {
+      // Out of its old home, into this one — one click instead of two steps.
+      const card = _cbLibrary.find(c => c.id === id);
+      const from = CB_HOMES[el.querySelector(".cb-move").dataset.from];
+      if (!card || !from || home.problem(card) || home.full?.()) return;
+      from.write(from.read().filter(p => !_cbSameCopy(p, card)));
+      save([...home.read(), JSON.parse(JSON.stringify(card))]);
+    });
     el.querySelector(".cb-refresh")?.addEventListener("click", () => {
-      const at = draft.custom_bonuses.findIndex(p => p.id === id);
-      draft.custom_bonuses[at] = JSON.parse(JSON.stringify(_cbLibrary.find(c => c.id === id)));
-      saveDraft();
-      renderCustomBonusPicker();
+      const arr = [...home.read()];
+      arr[arr.findIndex(p => p.id === id)] = JSON.parse(JSON.stringify(_cbLibrary.find(c => c.id === id)));
+      save(arr);
     });
     el.querySelector(".cb-adopt")?.addEventListener("click", async () => {
-      const at = draft.custom_bonuses.findIndex(p => (p.id || "") === id);
-      const saved = await cbSaveToLibrary(draft.custom_bonuses[at]);
-      draft.custom_bonuses[at] = saved;       // may have gained an id
-      saveDraft();
-      renderCustomBonusPicker();
+      const arr = [...home.read()];
+      const at = arr.findIndex(p => (p.id || "") === id);
+      arr[at] = await cbSaveToLibrary(arr[at]);      // may have gained an id
+      save(arr);
+      renderCustomBonusPicker();                      // the other homes see the new library card
+    });
+  });
+}
+
+// Slide re-drawn cards from their old place to their new one ("FLIP": note
+// where each card is, re-draw, then play each moved card back from its old
+// spot).  Cards are matched by data-id, so a full innerHTML re-render works.
+// Skipped when the section is folded away or the player asks for less motion.
+const _REDUCED_MOTION = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+
+function _flipCards(container, redraw) {
+  const animate = container.offsetParent !== null && !_REDUCED_MOTION?.matches
+    && typeof Element.prototype.animate === "function";
+  const before = new Map();
+  if (animate) {
+    container.querySelectorAll("[data-id]").forEach(el => before.set(el.dataset.id, el.getBoundingClientRect()));
+  }
+  redraw();
+  if (!animate) return;
+  container.querySelectorAll("[data-id]").forEach(el => {
+    const was = before.get(el.dataset.id);
+    if (!was) return;
+    const now = el.getBoundingClientRect();
+    const dx = was.left - now.left, dy = was.top - now.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+               { duration: 250, easing: "cubic-bezier(.2, .7, .3, 1)" });
+  });
+}
+
+// The custom-bonus sections fold (<details data-fold>).  Open or closed is
+// remembered per section on this browser; without storage they just open.
+function _wireCardFolds() {
+  document.querySelectorAll("details.cb-fold[data-fold]").forEach(d => {
+    const key = `ef.cbFold.${d.dataset.fold}`;
+    try { if (localStorage.getItem(key) === "closed") d.open = false; } catch (e) { /* storage off */ }
+    d.addEventListener("toggle", () => {
+      try { localStorage.setItem(key, d.open ? "open" : "closed"); } catch (e) { /* storage off */ }
     });
   });
 }
 
 function wireCustomBonusPicker() {
+  _wireCardFolds();
   renderCustomBonusPicker();
   // The library is edited in another tab; pick up changes on return.
-  window.addEventListener("focus", () => {
-    if (!document.getElementById("panel-3")?.classList.contains("d-none")) renderCustomBonusPicker();
-  });
+  window.addEventListener("focus", () => renderCustomBonusPicker());
 }
 
 // ── "Unlock ..." bonuses ─────────────────────────────────────────────────────
@@ -2586,7 +2719,12 @@ function _moveTeamBonusCard(id, isSelected) {
 
 // ── Unique Technologies (Castle + Imperial) ───────────────────────────────────
 
+// One budget per UT, shared by catalog picks and library cards (_utUsed).
 const MAX_UT_EFFECTS = 5;
+
+function _utUsed(ut) {
+  return (ut?.effects || []).length + (ut?.custom_bonuses || []).length;
+}
 
 // Maps wizard step → { draft key, input prefix }
 const UT_STEPS = {
@@ -2638,44 +2776,110 @@ function _updateUTCostPreview(step) {
   if (el) el.textContent = str ? `Cost: ${str}` : "";
 }
 
-// ── UT mode: vanilla vs custom ────────────────────────────────────────────────
+// ── UT picks: one grid over both preset pools ─────────────────────────────────
+// A UT is a list of presets, {id, tier, multiplier}, plus library cards.  The
+// two pools number their techs independently — castle 25 is Nomads, imperial
+// 25 is Drill — so a pick is always id AND tier (civ_appender.UT_SLOT_TIER);
+// either slot may hold either pool's presets.  One preset and no cards is that
+// tech as it is in the game (mode "vanilla"); anything more stacks into one
+// (mode "custom"), which is also what lets the build apply library cards
+// (civ_appender.get_ut_cards).  The mode is derived, never chosen.
 
-function _setUTMode(step, mode) {
-  const { key, prefix } = UT_STEPS[step];
-  const ut = _utDraft(step);
-  ut.mode  = mode;
-  saveDraft();
+const _utTierFilter = { 6: "all", 7: "all" };     // which pool the grid shows
 
-  const vanillaSec  = document.getElementById(`${prefix}-vanilla-section`);
-  const customSec   = document.getElementById(`${prefix}-custom-section`);
-  const sharedSec   = document.getElementById(`${prefix}-shared-section`);
-  const effectsSec  = document.getElementById(`${prefix}-effects-section`);
+function _utOwnTier(step)     { return step === 6 ? "castle" : "imperial"; }
+function _utCatalogOf(tier)   { return tier === "castle" ? _castleUtCatalog : _imperialUtCatalog; }
+function _utPreset(tier, id)  { return _utCatalogOf(tier).find(t => t.id === id); }
+function _utCostOf(tier, id)  { return (tier === "castle" ? _castleUtCosts : _imperialUtCosts)[String(id)] || null; }
 
-  const hintVanilla = document.getElementById(`${prefix}-mode-hint-vanilla`);
-  const hintCustom  = document.getElementById(`${prefix}-mode-hint-custom`);
-
-  if (mode === "vanilla") {
-    if (vanillaSec)  vanillaSec.style.display  = "";
-    if (customSec)   customSec.style.display   = "none";
-    if (effectsSec)  effectsSec.style.display  = "none";
-    if (hintVanilla) hintVanilla.style.display = "";
-    if (hintCustom)  hintCustom.style.display  = "none";
-    // Show shared only if a tech is already selected
-    if (ut.vanilla_km_idx != null) {
-      if (sharedSec) sharedSec.classList.remove("d-none");
-    }
-  } else {
-    if (vanillaSec)  vanillaSec.style.display  = "none";
-    if (customSec)   customSec.style.display   = "";
-    if (effectsSec)  effectsSec.style.display  = "";
-    if (hintVanilla) hintVanilla.style.display = "none";
-    if (hintCustom)  hintCustom.style.display  = "";
-    if (sharedSec)   sharedSec.classList.remove("d-none");
+// Every pick gets its pool; a draft from before the merge has none (its slot's
+// own), and may hold a vanilla pick only in vanilla_km_idx.
+function _utNormalize(step) {
+  const ut = draft[UT_STEPS[step].key];
+  if (!ut) return;
+  if (!Array.isArray(ut.effects)) ut.effects = [];
+  if (!ut.effects.length && ut.vanilla_km_idx != null) ut.effects = [{ id: ut.vanilla_km_idx, multiplier: 1 }];
+  const own = _utOwnTier(step);
+  for (const e of ut.effects) {
+    if (e.tier !== "castle" && e.tier !== "imperial") e.tier = own;
+    if (!e.multiplier) e.multiplier = 1;
   }
+  delete ut.vanilla_km_idx;
+}
 
-  // Sync radio button state
-  const radio = document.querySelector(`input[name="${prefix}-mode"][value="${mode}"]`);
-  if (radio) radio.checked = true;
+// What the picks would fill in: the first pick's name and cost; its own
+// description when it stands alone, otherwise every pick's and card's text.
+function _utAutoText(ut) {
+  const picks = ut.effects || [];
+  const cards = ut.custom_bonuses || [];
+  const first = picks[0] ? _utPreset(picks[0].tier, picks[0].id) : null;
+  const desc = picks.length === 1 && !cards.length
+    ? (first?.desc || "")
+    : [...picks.map(e => _utPreset(e.tier, e.id)?.desc), ...cards.map(cbCardText)].filter(Boolean).join("; ");
+  return { name: first?.name || "", desc, cost: picks[0] ? _utCostOf(picks[0].tier, picks[0].id) : null };
+}
+
+function _utSameCost(ut, c) {
+  if (!c) return false;
+  const cost = ut.cost || {};
+  return ["food", "wood", "stone", "gold"].every(r => (cost[r] || 0) === (c.cost[r] || 0)) && (ut.time ?? 60) === c.time;
+}
+
+// Change a UT's picks or cards.  Name, description and cost follow the picks
+// only while they still hold what the picks last filled in — anything the
+// player typed stays.  So no state is stored: "filled in by us" is "equal to
+// what the picks before this change would have filled in".
+function _utChange(step, mutate) {
+  const ut = _utDraft(step);
+  _utNormalize(step);
+  const before = _utAutoText(ut);
+  mutate(ut);
+  const after = _utAutoText(ut);
+  if (!ut.name || ut.name === before.name) ut.name = after.name;
+  if (!ut.description || ut.description === before.desc) ut.description = after.desc;
+  const zero = !["food", "wood", "stone", "gold"].some(r => (ut.cost || {})[r] > 0);
+  if (after.cost && (zero || _utSameCost(ut, before.cost))) {
+    ut.cost = { ...after.cost.cost };
+    ut.time = after.cost.time;
+  }
+  const nCards = (ut.custom_bonuses || []).length;
+  ut.mode = ut.effects.length === 1 && !nCards ? "vanilla" : (ut.effects.length || nCards ? "custom" : "vanilla");
+  saveDraft();
+  _utFillForm(step);
+  renderUTGrid(step);
+  _updateUTCostPreview(step);
+  _renderCardHome(step === 6 ? "castle" : "imperial");
+}
+
+function _utFillForm(step) {
+  const { prefix } = UT_STEPS[step];
+  const ut = draft[UT_STEPS[step].key] || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el && el !== document.activeElement) el.value = v; };
+  set(`${prefix}-name`, ut.name || "");
+  set(`${prefix}-desc`, ut.description || "");
+  ["food", "wood", "stone", "gold"].forEach(r => set(`${prefix}-${r}`, (ut.cost || {})[r] ?? 0));
+  set(`${prefix}-time`, ut.time ?? 60);
+}
+
+function _utToggle(step, tier, id) {
+  const { prefix } = UT_STEPS[step];
+  const ut = _utDraft(step);
+  _utNormalize(step);
+  const at = ut.effects.findIndex(e => e.id === id && e.tier === tier);
+  const limit = document.getElementById(`${prefix}-limit`);
+  if (at < 0 && _utUsed(ut) >= MAX_UT_EFFECTS) {
+    // Inline, not alert(): a browser dialog blocks the page.
+    if (limit) {
+      limit.textContent = `A unique tech can hold at most ${MAX_UT_EFFECTS} techs and custom bonuses combined — remove one first.`;
+      limit.classList.remove("d-none");
+    }
+    return;
+  }
+  limit?.classList.add("d-none");
+  _utChange(step, u => {
+    if (at >= 0) u.effects.splice(at, 1);
+    else u.effects.push({ id, tier, multiplier: 1 });
+  });
 }
 
 // ── UT vanilla grid ───────────────────────────────────────────────────────────
@@ -2692,48 +2896,49 @@ function _getUTTooltip() {
 }
 
 function renderUTGrid(step) {
-  const { prefix } = UT_STEPS[step];
-  const tier      = step === 6 ? 'castle' : 'imperial';
-  const catalog   = tier === 'castle' ? _castleUtCatalog : _imperialUtCatalog;
-  const grid      = document.getElementById(`${prefix}-vanilla-grid`);
+  const { prefix, key } = UT_STEPS[step];
+  const grid = document.getElementById(`${prefix}-vanilla-grid`);
   if (!grid) return;
-
-  if (!catalog.length) {
+  if (!_castleUtCatalog.length && !_imperialUtCatalog.length) {
     grid.innerHTML = '<div class="text-muted small fst-italic py-2">Loading…</div>';
     return;
   }
 
-  const q         = (document.getElementById(`${prefix}-vanilla-search`)?.value || "").toLowerCase();
-  const catFilter = tier === 'castle' ? _cutCatFilter : _iutCatFilter;
-  const ut        = draft[UT_STEPS[step].key] || {};
-  const selId     = ut.vanilla_km_idx ?? ut.effects?.[0]?.id ?? null;
-  const selMult   = ut.effects?.[0]?.multiplier || 1;
-  const utOvPool  = _utOverrides[tier] || {};
+  const own   = _utOwnTier(step);
+  const other = own === "castle" ? "imperial" : "castle";
+  const q     = (document.getElementById(`${prefix}-vanilla-search`)?.value || "").toLowerCase();
+  const catFilter  = own === "castle" ? _cutCatFilter : _iutCatFilter;
+  const tierFilter = _utTierFilter[step];
+  const picks = (draft[key] || {}).effects || [];
 
-  let html = '', anyVisible = false;
-  for (const t of catalog) {
-    const card      = _utCards[tier][String(t.id)] || {};
-    const cat       = _UT_CATEGORIES.find(c => c.key === card.category) || _UT_CATEGORIES.at(-1);
-    const catLabel  = cat.key.charAt(0).toUpperCase() + cat.key.slice(1);
-    const iconFile  = card.icon;
-    const textMatch = !q || t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q);
-    const catMatch  = catFilter.size === 0 || catFilter.has(cat.key);
-    const visible   = textMatch && catMatch;
-    if (visible) anyVisible = true;
-    const isSel     = t.id === selId;
-    const sel       = isSel ? ' selected' : '';
-    const iconHtml  = iconFile
-      ? `<img class="card-icon" src="/static/icons/units/${iconFile}" alt="${catLabel}" onerror="this.style.display='none'">`
+  const cardHtml = (t, tier, pick) => {
+    const card     = _utCards[tier][String(t.id)] || {};
+    const cat      = _UT_CATEGORIES.find(c => c.key === card.category) || _UT_CATEGORIES.at(-1);
+    const catLabel = cat.key.charAt(0).toUpperCase() + cat.key.slice(1);
+    const iconHtml = card.icon
+      ? `<img class="card-icon" src="/static/icons/units/${card.icon}" alt="${catLabel}" onerror="this.style.display='none'">`
       : '';
-    const noMult    = utOvPool[String(t.id)]?.multiplier === false;
-    const multWidget = (isSel && !noMult)
-      ? `<div class="multiplier"><button class="multiplier-circle" data-mult="${selMult}" title="Multiplier"><span class="multiplier-amount">×${selMult}</span></button></div>`
+    const noMult = (_utOverrides[tier] || {})[String(t.id)]?.multiplier === false;
+    const mult   = pick?.multiplier || 1;
+    const multWidget = (pick && !noMult)
+      ? `<div class="multiplier"><button class="multiplier-circle" data-mult="${mult}" title="Multiplier — click to raise"><span class="multiplier-amount">×${mult}</span></button></div>`
       : '';
-    html += `<div class="bonus-card${sel}" data-ut-id="${t.id}" data-cat="${cat.key}"
-      style="--cat-color:var(--cat-${cat.key})${visible ? '' : ';display:none'}"
-      title="${_esc(t.label)}">
+    // A tech from the other age says so: it takes effect in THIS age.
+    // Every card shows its own age's icon, on both steps, so the two pools
+    // read the same; the tooltip says what a pick from the other age means.
+    const ageName = tier === "castle" ? "Castle" : "Imperial";
+    const tierBadge = `<img class="ut-tier-badge" src="/static/icons/units/${tier}_age.png" alt="${ageName} Age tech">`;
+    const cost = _utCostOf(tier, t.id);
+    const tip = [
+      t.desc,
+      cost ? `Cost: ${_formatCostStr(cost.cost, cost.time)}` : "",
+      tier === own ? `${ageName} Age tech.`
+                   : `Originally ${tier === "imperial" ? "an" : "a"} ${ageName} Age tech — here it takes effect when this tech is researched.`,
+    ].filter(Boolean).join("\n");
+    return `<div class="bonus-card${pick ? ' selected' : ''}" data-ut-id="${t.id}" data-ut-tier="${tier}" data-cat="${cat.key}"
+      style="--cat-color:var(--cat-${cat.key})" data-tip-title="${_esc(t.name)}" data-tip="${_esc(tip)}" role="button" tabindex="0" aria-pressed="${!!pick}">
       <div class="card-header">
-        <div><i class="fa-solid ${cat.icon}"></i><span class="bonus-type">${catLabel}</span></div>
+        <div><i class="fa-solid ${cat.icon}"></i><span class="bonus-type">${catLabel}</span>${tierBadge}</div>
         ${multWidget}
       </div>
       <div class="card-body">
@@ -2743,51 +2948,52 @@ function renderUTGrid(step) {
       </div>
       <div class="card-shadow"></div><div class="top-corners"></div><div class="bottom-corners"></div>
     </div>`;
+  };
+
+  // Picks first, in pick order and regardless of filters, so they never hide.
+  const selHtml = picks.map(e => {
+    const t = _utPreset(e.tier, e.id);
+    return t ? cardHtml(t, e.tier, e) : "";
+  }).join("");
+  let availHtml = "", shown = 0;
+  for (const tier of [own, other]) {
+    if (tierFilter !== "all" && tierFilter !== tier) continue;
+    for (const t of _utCatalogOf(tier)) {
+      if (picks.some(e => e.id === t.id && e.tier === tier)) continue;
+      const cat = (_UT_CATEGORIES.find(c => c.key === (_utCards[tier][String(t.id)] || {}).category) || _UT_CATEGORIES.at(-1)).key;
+      if (q && !t.name.toLowerCase().includes(q) && !t.desc.toLowerCase().includes(q)) continue;
+      if (catFilter.size && !catFilter.has(cat)) continue;
+      availHtml += cardHtml(t, tier, null);
+      shown++;
+    }
   }
 
-  grid.innerHTML = `<div class="bonus-section">${html}</div>` +
-    (anyVisible ? '' : '<div class="text-muted small fst-italic py-2">No results found.</div>');
+  grid.innerHTML =
+    (selHtml ? `<div class="bonus-section bonus-section-selected">${selHtml}</div><div class="bonus-section-divider">Available</div>` : "")
+    + `<div class="bonus-section">${availHtml}</div>`
+    + (shown ? "" : '<div class="text-muted small fst-italic py-2">No technologies match.</div>');
+  const count = document.getElementById(`${prefix}-count`);
+  const used = _utUsed(draft[key]);
+  if (count) count.textContent = used ? `${used} of ${MAX_UT_EFFECTS} picked` : "";
 
   grid.querySelectorAll('.bonus-card[data-ut-id]').forEach(el => {
-    el.addEventListener('click', e => {
-      if (e.target.closest('.multiplier-circle')) return;
-      const clickedId = parseInt(el.dataset.utId, 10);
-      const ut2 = draft[UT_STEPS[step].key] || {};
-      const curId = ut2.vanilla_km_idx ?? ut2.effects?.[0]?.id ?? null;
-      if (clickedId === curId) {
-        // Click-off: deselect the card
-        const { prefix } = UT_STEPS[step];
-        const ut3 = _utDraft(step);
-        delete ut3.vanilla_km_idx;
-        ut3.effects = [];
-        ut3.name = "";
-        ut3.description = "";
-        saveDraft();
-        document.getElementById(`${prefix}-vanilla-selected`)?.classList.add("d-none");
-        document.getElementById(`${prefix}-vanilla-hint`)?.classList.remove("d-none");
-        document.getElementById(`${prefix}-shared-section`)?.classList.add("d-none");
-        const nameEl = document.getElementById(`${prefix}-name`);
-        const descEl = document.getElementById(`${prefix}-desc`);
-        if (nameEl) nameEl.value = "";
-        if (descEl) descEl.value = "";
-        renderUTGrid(step);
-      } else {
-        selectVanillaTech(step, clickedId);
-      }
+    const toggle = () => _utToggle(step, el.dataset.utTier, parseInt(el.dataset.utId, 10));
+    el.addEventListener('click', e => { if (!e.target.closest('.multiplier-circle')) toggle(); });
+    el.addEventListener('keydown', e => {
+      if ((e.key === " " || e.key === "Enter") && !e.target.closest('.multiplier-circle')) { e.preventDefault(); toggle(); }
     });
   });
-
   grid.querySelectorAll('.multiplier-circle').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const ut   = _utDraft(step);
-      const cur  = ut.effects?.[0]?.multiplier || 1;
-      const next = cur >= 10 ? 1 : cur + 1;
-      if (ut.effects?.[0]) ut.effects[0].multiplier = next;
+      const el   = btn.closest('.bonus-card');
+      const pick = (_utDraft(step).effects || []).find(x =>
+        x.id === parseInt(el.dataset.utId, 10) && x.tier === el.dataset.utTier);
+      if (!pick) return;
+      pick.multiplier = (pick.multiplier || 1) >= 10 ? 1 : (pick.multiplier || 1) + 1;
       saveDraft();
-      btn.dataset.mult = next;
-      btn.querySelector('.multiplier-amount').textContent = '×' + next;
-      renderUTEffectSlots(step);
+      btn.dataset.mult = pick.multiplier;
+      btn.querySelector('.multiplier-amount').textContent = '×' + pick.multiplier;
     });
   });
 }
@@ -2942,238 +3148,56 @@ document.addEventListener("change", e => {
               Number(input.value), input.dataset.default === "1");
 });
 
-function selectVanillaTech(step, id) {
-  const { key, prefix } = UT_STEPS[step];
-  const catalog = step === 6 ? _castleUtCatalog : _imperialUtCatalog;
-  const costs   = step === 6 ? _castleUtCosts   : _imperialUtCosts;
-  const tech    = catalog.find(t => t.id === id);
-  if (!tech) return;
-
-  const ut = _utDraft(step);
-  ut.vanilla_km_idx = id;
-  ut.name           = tech.name;
-  ut.description    = tech.desc;
-  ut.effects        = [{ id, multiplier: 1 }];
-
-  const c = costs[String(id)];
-  if (c) {
-    ut.cost = { ...c.cost };
-    ut.time = c.time;
-  }
-  saveDraft();
-
-  // Populate form fields
-  const nameEl = document.getElementById(`${prefix}-name`);
-  const descEl = document.getElementById(`${prefix}-desc`);
-  if (nameEl) nameEl.value = tech.name;
-  if (descEl) descEl.value = tech.desc;
-  if (c) {
-    ["food", "wood", "stone", "gold"].forEach(r => {
-      const el = document.getElementById(`${prefix}-${r}`);
-      if (el) el.value = c.cost[r] || 0;
-    });
-    const timeEl = document.getElementById(`${prefix}-time`);
-    if (timeEl) timeEl.value = c.time || 60;
-  }
-
-  // Show selected badge + shared section
-  const nameSpan  = document.getElementById(`${prefix}-vanilla-name`);
-  const selBadge  = document.getElementById(`${prefix}-vanilla-selected`);
-  const hint      = document.getElementById(`${prefix}-vanilla-hint`);
-  const sharedSec = document.getElementById(`${prefix}-shared-section`);
-  if (nameSpan) nameSpan.textContent = tech.name;
-  if (selBadge) selBadge.classList.remove("d-none");
-  if (hint)     hint.classList.add("d-none");
-  if (sharedSec) sharedSec.classList.remove("d-none");
-
-  renderUTGrid(step);
-  _updateUTCostPreview(step);
-}
-
 // ── initUTPanel ───────────────────────────────────────────────────────────────
 
 function initUTPanel(step) {
   const { key, prefix } = UT_STEPS[step];
-  const ut = draft[key] || {};
-  const mode = ut.mode || "vanilla";
+  _utNormalize(step);
+  _utFillForm(step);
 
-  // Migrate drafts that saved vanilla_id instead of vanilla_km_idx,
-  // or that have an effects entry but no selection key.
-  if (mode === "vanilla" && ut.vanilla_km_idx == null && ut.effects?.[0]?.id != null) {
-    ut.vanilla_km_idx = ut.effects[0].id;
-    saveDraft();
-  }
-
-  // Restore name + desc
   const nameEl = document.getElementById(`${prefix}-name`);
-  const descEl = document.getElementById(`${prefix}-desc`);
-  if (nameEl) nameEl.value = ut.name || "";
-  if (descEl) descEl.value = ut.description || "";
-
-  // Restore cost + time
-  const cost = ut.cost || {};
-  ["food", "wood", "stone", "gold"].forEach(r => {
-    const el = document.getElementById(`${prefix}-${r}`);
-    if (el) el.value = cost[r] ?? 0;
-  });
-  const timeEl = document.getElementById(`${prefix}-time`);
-  if (timeEl) timeEl.value = ut.time ?? 60;
-
-  // Wire inputs → draft (once)
-  if (!nameEl?._utWired) {
-    if (nameEl) {
-      nameEl._utWired = true;
-      nameEl.addEventListener("input", e => {
-        _utDraft(step).name = e.target.value.trim();
-        saveDraft();
-      });
-    }
-    if (descEl) descEl.addEventListener("input", e => {
+  if (nameEl && !nameEl._utWired) {
+    nameEl._utWired = true;
+    nameEl.addEventListener("input", e => { _utDraft(step).name = e.target.value.trim(); saveDraft(); });
+    document.getElementById(`${prefix}-desc`)?.addEventListener("input", e => {
       _utDraft(step).description = e.target.value;
       saveDraft();
     });
     ["food", "wood", "stone", "gold"].forEach(r => {
-      const el = document.getElementById(`${prefix}-${r}`);
-      if (el) el.addEventListener("input", e => {
-        _utDraft(step).cost[r] = Math.max(0, parseInt(e.target.value, 10) || 0);
+      document.getElementById(`${prefix}-${r}`)?.addEventListener("input", e => {
+        const ut = _utDraft(step);
+        ut.cost = { food: 0, wood: 0, stone: 0, gold: 0, ...(ut.cost || {}) };
+        ut.cost[r] = Math.max(0, parseInt(e.target.value, 10) || 0);
         saveDraft();
         _updateUTCostPreview(step);
       });
     });
-    if (timeEl) timeEl.addEventListener("input", e => {
+    document.getElementById(`${prefix}-time`)?.addEventListener("input", e => {
       _utDraft(step).time = Math.max(0, parseInt(e.target.value, 10) || 0);
       saveDraft();
       _updateUTCostPreview(step);
     });
-
-    // Mode toggle radios
-    document.querySelectorAll(`input[name="${prefix}-mode"]`).forEach(radio => {
-      radio.addEventListener("change", () => _setUTMode(step, radio.value));
-    });
-
-    // Vanilla search filter
-    const searchEl = document.getElementById(`${prefix}-vanilla-search`);
-    if (searchEl) searchEl.addEventListener("input", () => renderUTGrid(step));
-
-    // "Change" button in vanilla selected badge
-    const changeBtn = document.getElementById(`${prefix}-vanilla-change`);
-    if (changeBtn) changeBtn.addEventListener("click", () => {
-      const ut2 = _utDraft(step);
-      delete ut2.vanilla_km_idx;
-      ut2.effects = [];
-      saveDraft();
-      document.getElementById(`${prefix}-vanilla-selected`)?.classList.add("d-none");
-      document.getElementById(`${prefix}-vanilla-hint`)?.classList.remove("d-none");
-      document.getElementById(`${prefix}-shared-section`)?.classList.add("d-none");
+    document.getElementById(`${prefix}-vanilla-search`)?.addEventListener("input", () => renderUTGrid(step));
+    document.querySelectorAll(`#${prefix}-tier-filter [data-tier]`).forEach(btn => btn.addEventListener("click", () => {
+      _utTierFilter[step] = btn.dataset.tier;
+      document.querySelectorAll(`#${prefix}-tier-filter [data-tier]`).forEach(b =>
+        b.classList.toggle("active", b === btn));
       renderUTGrid(step);
-    });
-
-    // Effect search picker (custom mode)
-    const utCatalog = step === 6 ? _castleUtCatalog : _imperialUtCatalog;
-    wireSearchPicker({
-      inputId:   `${prefix}-effect-search`,
-      resultsId: `${prefix}-effect-results`,
-      catalog:   utCatalog,
-      onSelect:  (id) => addUTEffect(step, id),
-    });
+    }));
   }
 
-  // Render category pills (every visit, not just first wiring)
-  const _utTier      = step === 6 ? 'castle' : 'imperial';
-  const _utCatFilter = _utTier === 'castle' ? _cutCatFilter : _iutCatFilter;
-  _renderCatPills(`${prefix}-cat-pills`, _utCatFilter, () => renderUTGrid(step), _UT_CATEGORIES);
+  const catFilter = step === 6 ? _cutCatFilter : _iutCatFilter;
+  _renderCatPills(`${prefix}-cat-pills`, catFilter, () => renderUTGrid(step), _UT_CATEGORIES);
 
-  // Set initial mode (shows/hides sections) + render grid
-  _setUTMode(step, mode);
-
-  // Restore vanilla selection state
-  if (mode === "vanilla" && ut.vanilla_km_idx != null) {
-    const nameSpan = document.getElementById(`${prefix}-vanilla-name`);
-    const selBadge = document.getElementById(`${prefix}-vanilla-selected`);
-    const hint     = document.getElementById(`${prefix}-vanilla-hint`);
-    if (nameSpan) nameSpan.textContent = ut.name || "";
-    if (selBadge) selBadge.classList.remove("d-none");
-    if (hint)     hint.classList.add("d-none");
-  }
-
-  loadUTCosts().then(() => {
+  Promise.all([loadUTCatalog(), loadUTCosts()]).then(() => {
+    // A pick with no name yet (a KM import, a draft from before the merge)
+    // takes its name, description and cost from the pick, as a click would.
+    const ut = draft[key];
+    if (ut?.effects?.length && !ut.name) _utChange(step, () => {});
     renderUTGrid(step);
-    // If vanilla mode + tech selected but name is empty (e.g. converted from KM), auto-populate
-    const ut2 = draft[key] || {};
-    if ((ut2.mode || "vanilla") === "vanilla" && ut2.vanilla_km_idx != null && !ut2.name) {
-      selectVanillaTech(step, ut2.vanilla_km_idx);
-    }
   });
-  renderUTEffectSlots(step);
+  renderUTGrid(step);
   _updateUTCostPreview(step);
-}
-
-function renderUTEffectSlots(step) {
-  const { key, prefix } = UT_STEPS[step];
-  const ut       = draft[key] || {};
-  const effects  = ut.effects || [];
-  const container = document.getElementById(`${prefix}-effect-slots`);
-  const hint      = document.getElementById(`${prefix}-effect-empty`);
-
-  container.querySelectorAll(".bonus-slot").forEach(el => el.remove());
-  hint.style.display = effects.length ? "none" : "";
-
-  const utCatalog  = step === 6 ? _castleUtCatalog : _imperialUtCatalog;
-  const utOvPool   = step === 6 ? _utOverrides.castle : _utOverrides.imperial;
-  effects.forEach((b, idx) => {
-    const label    = (utCatalog.find(c => c.id === b.id) || {}).label || `Effect #${b.id}`;
-    const noMult   = utOvPool[String(b.id)]?.multiplier === false;
-    const multWidget = noMult
-      ? `<span class="input-group-text" style="background: oklch(from var(--body-bg) calc(l + 0.04) c h); border-color: oklch(from var(--body-bg) calc(l + 0.18) c h); font-size:.75rem; color:var(--accent-3); border-radius: var(--bs-border-radius-sm);">×1</span>`
-      : `<div class="input-group input-group-sm" style="width:auto;">
-        <span class="input-group-text" style="background: oklch(from var(--body-bg) calc(l + 0.04) c h); border-color: oklch(from var(--body-bg) calc(l + 0.18) c h); font-size:.75rem; color:var(--accent-3)">×</span>
-        <select class="form-select form-select-sm ut-eff-mult" data-idx="${idx}" style="width:4.5rem;">
-          ${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}" ${b.multiplier===n?'selected':''}>${n}</option>`).join('')}
-        </select>
-      </div>`;
-    const slot  = document.createElement("div");
-    slot.className = "bonus-slot d-flex align-items-center gap-2";
-    slot.innerHTML = `
-      <span class="bonus-slot-label flex-grow-1 small">${label}</span>
-      ${multWidget}
-      <button class="btn btn-sm ut-eff-remove" data-idx="${idx}"
-        style="background:transparent; border:1px solid oklch(from var(--body-bg) calc(l + 0.2) c h); color:var(--accent-3); padding:2px 7px; line-height:1.5;"
-        title="Remove effect">✕</button>
-    `;
-    container.appendChild(slot);
-  });
-
-  container.querySelectorAll(".ut-eff-mult").forEach(sel => {
-    sel.addEventListener("change", e => {
-      const idx = parseInt(e.target.dataset.idx, 10);
-      _utDraft(step).effects[idx].multiplier = parseInt(e.target.value, 10);
-      saveDraft();
-    });
-  });
-  container.querySelectorAll(".ut-eff-remove").forEach(btn => {
-    btn.addEventListener("click", e => {
-      const idx = parseInt(e.target.dataset.idx, 10);
-      _utDraft(step).effects.splice(idx, 1);
-      saveDraft();
-      renderUTEffectSlots(step);
-    });
-  });
-}
-
-function addUTEffect(step, id) {
-  const ut = _utDraft(step);
-  if (!ut.effects) ut.effects = [];
-  if (ut.effects.length >= MAX_UT_EFFECTS) {
-    alert(`A unique tech can have at most ${MAX_UT_EFFECTS} effects.`);
-    return;
-  }
-  if (ut.effects.find(e => e.id === id)) {
-    alert("That effect is already added.");
-    return;
-  }
-  ut.effects.push({ id, multiplier: 1 });
-  saveDraft();
-  renderUTEffectSlots(step);
 }
 
 // ── Unique Unit ───────────────────────────────────────────────────────────────
@@ -4289,6 +4313,7 @@ async function init() {
     draft.bonuses?.length ||
     draft.custom_bonuses?.length ||
     draft.team_bonuses?.length ||
+    draft.custom_team_bonuses?.length ||
     draft.unique_unit?.km_idx != null ||
     draft.castle_ut?.vanilla_km_idx != null ||
     draft.castle_ut?.effects?.length ||

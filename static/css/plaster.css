@@ -1085,10 +1085,10 @@ footer {
     position: relative;
     isolation: isolate;
     display: flex;
-    gap: 10px;
+    gap: 0px;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 0.5rem 0.5rem;
+    padding: 15px 0.25rem 0.5rem;
 
     & > * {
       position: relative;
@@ -1189,6 +1189,9 @@ footer {
   right: -11px;
   transform: rotate(-180deg);
 }
+/* The age a UT preset comes from, on every UT card; one from the other age
+   takes effect when THIS tech is researched (the tooltip says so). */
+.ut-tier-badge { display: inline-block; width: 20px; height: 20px; margin: -2px 0 0 .3rem; vertical-align: middle; object-fit: contain; }
 .multiplier-circle {
   width: 30px;
   height: 30px;
@@ -1282,7 +1285,7 @@ img.card-main-image {
 .bonus-section.bonus-section-selected .card-stat {
     display: none;
 }
-.bonus-card.selected:not([data-ut-id]) {
+.bonus-card.selected:not([data-ut-id]):not(.cb-card) {
   .card-icon {
     height: 45px;
   }
@@ -1914,24 +1917,62 @@ img.card-main-image {
 }
 
 /* ── Custom bonus library + wizard picker (custom_bonuses.js) ─────────────── */
-.cb-list { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .75rem; }
-.cb-list:empty { display: none; }
-.cb-row {
-  display: flex; align-items: center; gap: .5rem;
-  padding: .45rem .6rem;
-  background: var(--parch-light);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  color: var(--ink-mid);
+/* ── Custom bonuses drawn as bonus cards (custom_bonuses.js cbCardHtml) ── */
+.cb-card { cursor: pointer; }
+#cb-library-list .cb-card { cursor: default; }
+/* The custom-bonus seal sits in the header's right-hand slot, where a
+   vanilla card has its multiplier (custom cards have none).  It needs ~42px to
+   read, more than the header's height, so it is pulled out of the flow and
+   overlaps the header's lower edge like a stamped seal: the header stays as
+   tall as a vanilla card's.  `right` keeps it clear of the corner ornament. */
+.bonus-card .card-header .cb-card-badge {
+  position: absolute; top: 11px; right: 5px; z-index: 13;
+  width: 40px; height: 40px; object-fit: contain;
+  filter: drop-shadow(1px 2px 2px rgb(0 0 0 / 0.6));
 }
-.cb-row .btn-link { padding: .1rem .35rem; white-space: nowrap; }
-.cb-row-icon { color: var(--gold); flex: none; }
-.cb-row-text { flex: 1; min-width: 0; font-size: .9rem; overflow-wrap: anywhere; }
-.cb-pick { cursor: pointer; transition: background .12s, border-color .12s; }
-.cb-pick:hover { border-color: var(--border-dark); background: var(--parch-mid); }
-.cb-pick:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
-.cb-pick.selected { border-color: var(--crimson); background: var(--parch-mid); }
-.cb-pick.selected .cb-row-icon { color: var(--crimson); }
+.cb-card .card-header > div { padding-right: 40px; }   /* a long category clears the seal */
+/* Shortcode chips under the composer's card text. */
+.cb-token-row { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.cb-token {
+  display: inline-flex; align-items: center; gap: .2rem; padding: 0 .4rem;
+  border: 1px solid var(--border-dark); border-radius: 999px; background: var(--parch-light);
+  font-size: .72rem; color: var(--ink-mid);
+}
+.cb-token:hover { background: #fff8e6; }
+.cb-token img { width: 14px; height: 14px; object-fit: contain; }
+/* Group art that is a Font Awesome icon, sized like a unit portrait. */
+.cb-card-icon--fa {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 66px; font-size: 36px; color: var(--walnut-mid, #5b3a1e);
+}
+/* Refused here (a tech bonus as a team bonus), or the home is full. */
+.cb-card--off { opacity: .5; cursor: not-allowed; }
+.cb-card--off:hover .card-body { background-color: color-mix(in srgb, var(--cat-color, transparent) 5%, var(--parch-light)); }
+.cb-card-why { font-size: .7rem; line-height: 1.25; color: var(--ink-mid); text-align: center; }
+/* In use in another home: dimmed like a refused card, except its reason and
+   the "Move here" button, which stay at full strength.  Opacity on the card
+   would take the button with it, and the border image and corner pieces belong
+   to the card itself, so instead a parchment veil (the card's own ::after,
+   unused by every other rule) covers the whole border box — border, corners
+   and seal included — and the reason and button sit above it. */
+.cb-card--off.cb-card--moveable { opacity: 1; cursor: default; }
+.cb-card--moveable::after {
+  content: ""; position: absolute; z-index: 20; pointer-events: none;
+  inset: 0 -11px -11px;                       /* the border: 0 top, 11px elsewhere */
+  background: color-mix(in srgb, var(--parch-light) 55%, transparent);
+}
+.cb-card--moveable .cb-card-move,
+.cb-card--moveable .cb-card-why { position: relative; z-index: 21; }
+.cb-card-move { margin-top: .15rem; }
+.cb-card-move .btn { font-size: .72rem; padding: .1rem .55rem; }
+.cb-card .btn-link { font-size: .72rem; padding: 0 .25rem; }
+.cb-card-actions { display: flex; justify-content: center; gap: .15rem; margin-top: .1rem; }
+.cb-card-actions .btn-link { font-size: .85rem; }
+/* Composer: the card being made, beside the line the game will show. */
+.cb-preview-wrap { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; }
+.cb-preview-card { flex: 0 0 190px; }
+.cb-preview-wrap .cb-preview { flex: 1 1 14rem; align-self: center; }
+
 .cb-editor {
   padding: 1rem;
   margin-bottom: 1rem;
@@ -1993,6 +2034,18 @@ img.card-main-image {
 }
 .cb-tile-label { text-align: center; overflow-wrap: anywhere; }
 .cb-chosen { margin-left: .4rem; font-weight: 600; color: var(--crimson); }
+/* Several targets (#76): one chip each, with its own remove button. */
+.cb-chosen-chip {
+  display: inline-flex; align-items: center; margin: 0 .3rem .2rem 0;
+  padding: .05rem .15rem .05rem .5rem; border: 1px solid var(--crimson); border-radius: 999px;
+  background: #fff3dc;
+}
+.cb-chosen-x {
+  border: 0; background: none; color: var(--ink-light); padding: 0 .3rem; margin-left: .15rem; line-height: 1;
+}
+.cb-chosen-x:hover { color: var(--crimson); }
+/* A tile that can't share the card with what's chosen. */
+.cb-tile--off, .cb-tile--off:hover { opacity: .38; cursor: not-allowed; border-color: var(--border); background: var(--parch-light); }
 .cb-section {
   grid-column: 1 / -1; margin: .35rem 0 0; padding-bottom: .1rem;
   font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
@@ -2051,3 +2104,31 @@ img.card-main-image {
   pointer-events: auto;
   filter: drop-shadow(1px 1px 1px rgb(0 0 0 / 0.6));
 }
+
+/* ── Hover tooltip (tooltip.js) — AoE2-style: bold serif heading, then text ── */
+#ef-tooltip {
+  position: fixed; z-index: 2000; left: 0; top: 0;
+  max-width: 320px; padding: 15px;
+  background: rgb(0 0 0 / 0.85);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  color: #fff; border-radius: 4px;
+  font-size: .8rem; line-height: 1.4;
+  pointer-events: none; opacity: 0; visibility: hidden;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
+}
+#ef-tooltip.is-visible { opacity: 1; visibility: visible; }
+@media (prefers-reduced-motion: no-preference) {
+  #ef-tooltip { transition: opacity .12s ease, visibility .12s; }
+}
+/* The heading is the same size as the text, only bold and in Cinzel. */
+.ef-tooltip-title { font-family: 'Cinzel', 'Times New Roman', serif; font-weight: 700; margin-bottom: .3rem; }
+.ef-tooltip-body > div + div { margin-top: .2rem; }
+
+/* ── Folding custom-bonus sections (<details class="cb-fold">) ───────────── */
+.cb-fold > summary { cursor: pointer; list-style: none; }
+.cb-fold > summary::-webkit-details-marker { display: none; }
+.cb-fold-chevron { font-size: .75em; transition: transform .15s ease; }
+.cb-fold:not([open]) .cb-fold-chevron { transform: rotate(-90deg); }
+.cb-fold-count { color: var(--ink-light); font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; }
+details.card.cb-fold:not([open]) > summary.card-header { border-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .cb-fold-chevron { transition: none; } }

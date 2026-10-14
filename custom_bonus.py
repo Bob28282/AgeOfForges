@@ -1,18 +1,29 @@
 """
 custom_bonus.py — user-composed civ bonus cards.
 
-A custom card is one target plus a list of stat effects:
+A custom card is one or more targets plus a list of stat effects:
 
-    {"target":  {"type": "group", "id": "cavalry"}
-                | {"type": "unit", "id": 38, "name": "Knight"},
-     "effects": [{"attr": "hp",           "op": "mul", "value": 20},
+    {"targets": [{"type": "group", "id": "archers"},
+                 {"type": "unit", "id": 539, "name": "Galley"}],
+     "effects": [{"attr": "range",        "op": "add", "value": 1},
                  {"attr": "pierce_armor", "op": "add", "value": 2}],
      "text":    ""}                  # optional; generated when blank
 
 `value` is always what the player typed: a flat amount for op "add", a percent
 for op "mul".  Each card becomes one civ-owned auto-fire tech (see
 civ_appender._apply_custom_bonuses), so the ~189-command Effect cap applies per
-card, not per civ.
+card, not per civ.  A card can also be picked as a team bonus or folded into a
+Custom unique tech — see team_problem / ut_problem for what those refuse.
+
+Several targets (#76) must share a family — units, buildings and villager
+jobs mix; techs mix only with techs; the Civilization target stands alone —
+and a card offers only the effects EVERY target can take, so Archers + Castles
+gets range but not movement speed.  Targets that overlap (Archers and Cavalry
+archers, Cavalry and the Knight line) reach each unit once: see _selectors.
+
+Cards before #76 had a single "target"; normalize reads it, and a one-target
+card is still written with "target" beside "targets" so an older Empire Forge
+reading a shared file keeps it.
 
 Every mechanism here copies a vanilla precedent — nothing is invented:
 
@@ -554,6 +565,7 @@ def catalog() -> dict:
         "cost_resources": list(COST_RESOURCES),
         "civ_ages": [{"id": k, "label": f"{v} Age"} for k, v in CIV_AGES.items()],
         "civ_resources": list(CIV_RESOURCES),
+        "tokens": {k: {"word": w, "icon": f"/static/icons/{icon}"} for k, (w, icon) in TEXT_TOKENS.items()},
     }
 
 
@@ -571,7 +583,65 @@ def normalize(raw) -> list[dict]:
 def _norm_card(raw) -> dict | None:
     if not isinstance(raw, dict):
         return None
-    t = raw.get("target") or {}
+    raw_targets = raw.get("targets")
+    if not isinstance(raw_targets, list):
+        raw_targets = [raw.get("target")]
+    targets: list[dict] = []
+    for t in raw_targets:
+        n = _norm_target(t)
+        if n is not None and not any(same_target(n, x) for x in targets):
+            targets.append(n)
+    if not targets:
+        return None
+    # One family per card, the first target's — a hand-edited file that mixes
+    # a tech into a unit card loses the tech, not the card.  The Civilization
+    # target is a family of its own, and only ever one.
+    family = target_family(targets[0])
+    targets = [t for t in targets if target_family(t) == family]
+    if family == "civ":
+        targets = targets[:1]
+
+    # Enforced here, not just in the wizard: a hand-edited or shared file must not
+    # be able to put HP on a villager job.  With several targets, an effect must
+    # suit every one of them.
+    kinds = {target_kind(t) for t in targets}
+    effects = [e for e in (_norm_effect(x) for x in (raw.get("effects") or []))
+               if e and kinds <= set(ATTRS[e["attr"]]["kinds"])]
+    if family == "civ" and targets[0].get("age"):
+        # Taking resources away on age-up has no vanilla precedent.
+        effects = [e for e in effects if not (e["attr"] == "resources" and e["value"] < 0)]
+    if not effects:
+        return None
+    card = {"targets": targets, "effects": effects, "text": str(raw.get("text") or "").strip()[:160]}
+    if len(targets) == 1:
+        card["target"] = targets[0]          # what Empire Forge before #76 reads
+    # The library id.  A civ keeps it on its copy, which is how the wizard knows
+    # which library card a civ's bonus came from.
+    cid = raw.get("id")
+    if isinstance(cid, str) and _ID_RE.fullmatch(cid):
+        card["id"] = cid
+    return card
+
+
+def same_target(a: dict, b: dict) -> bool:
+    keys = ("type", "id", "kind", "scope", "age")
+    return all(str(a.get(k, "")) == str(b.get(k, "")) for k in keys)
+
+
+def target_family(target: dict) -> str:
+    """Which targets can share a card: "stats" (units, buildings, jobs),
+    "tech" or "civ"."""
+    kind = target_kind(target)
+    return kind if kind in ("tech", "civ") else "stats"
+
+
+def card_family(card: dict) -> str:
+    return target_family(card["targets"][0])
+
+
+def _norm_target(t) -> dict | None:
+    if not isinstance(t, dict):
+        return None
     ttype = t.get("type")
     if ttype == "group":
         if t.get("id") not in GROUPS:
@@ -617,24 +687,7 @@ def _norm_card(raw) -> dict | None:
                 target["top"] = True
     else:
         return None
-
-    # Enforced here, not just in the wizard: a hand-edited or shared file must not
-    # be able to put HP on a villager job.
-    kind = target_kind(target)
-    effects = [e for e in (_norm_effect(x) for x in (raw.get("effects") or []))
-               if e and kind in ATTRS[e["attr"]]["kinds"]]
-    if target["type"] == "civ" and target.get("age"):
-        # Taking resources away on age-up has no vanilla precedent.
-        effects = [e for e in effects if not (e["attr"] == "resources" and e["value"] < 0)]
-    if not effects:
-        return None
-    card = {"target": target, "effects": effects, "text": str(raw.get("text") or "").strip()[:160]}
-    # The library id.  A civ keeps it on its copy, which is how the wizard knows
-    # which library card a civ's bonus came from.
-    cid = raw.get("id")
-    if isinstance(cid, str) and _ID_RE.fullmatch(cid):
-        card["id"] = cid
-    return card
+    return target
 
 
 def _norm_effect(raw) -> dict | None:
@@ -774,7 +827,7 @@ def civ_steps(card: dict) -> list[dict]:
                         "C-Bonus, +50g" -> "Post-TC +50g"
       start, negative   Starting X only, on 639 — the Chinese "-200f -50w"
     """
-    age = card["target"].get("age")
+    age = card["targets"][0].get("age")
     gated: list = []
     start_pos_start: list = []
     start_pos_stock: list = []
@@ -807,20 +860,73 @@ def civ_steps(card: dict) -> list[dict]:
     return steps
 
 
+# ── Shortcodes in the player's own card text ────────────────────────────────
+# "[gold]" draws the gold icon on the card and reads "gold" in game.  The text
+# is stored exactly as typed; each side translates it in ONE place:
+#   game     card_text() -> game_text(): every build route, View Civ and the
+#            team line already read card text through card_text()
+#   card     custom_bonuses.js renders the icon from catalog()["tokens"]
+#   browser  cbCardText() strips them the same way, for anything that becomes
+#            game text later (a unique tech's auto-filled description)
+# One table, served to the browser, so the two sides can't drift.  Same icons
+# as the wizard's vanilla cards (builder.js _TOKEN_ICONS).
+TEXT_TOKENS: dict[str, tuple[str, str]] = {
+    "food":          ("food",          "resources/food.png"),
+    "wood":          ("wood",          "resources/wood.png"),
+    "gold":          ("gold",          "resources/gold.png"),
+    "stone":         ("stone",         "resources/stone.png"),
+    "relic":         ("relic",         "resources/relic.png"),
+    "heart":         ("HP",            "properties/heart.png"),
+    "heartplus":     ("HP",            "properties/heartplus.png"),
+    "plus":          ("+",             "properties/plus.png"),
+    "reload":        ("reload time",   "properties/reload_time.png"),
+    "workrate":      ("work rate",     "properties/work_rate.png"),
+    "armor":         ("melee armor",   "properties/armor.png"),
+    "pierce_armor":  ("pierce armor",  "properties/pierce_armor.png"),
+    "attack":        ("attack",        "properties/attack.png"),
+    "pierce_attack": ("pierce attack", "properties/pierce_attack.png"),
+    "speed":         ("speed",         "properties/speed.png"),
+    "blast_radius":  ("blast radius",  "properties/blast_radius.png"),
+    "range":         ("range",         "properties/range.png"),
+}
+_TOKEN_RE = re.compile(r"\[(\w+)\]")
+
+
+def game_text(text: str) -> str:
+    """Player text as the game shows it: "[gold]" -> "gold".  An unknown
+    "[word]" is left alone, as the card leaves it."""
+    return _TOKEN_RE.sub(lambda m: TEXT_TOKENS[m.group(1)][0] if m.group(1) in TEXT_TOKENS
+                         else m.group(0), text)
+
+
 def card_text(card: dict) -> str:
-    """'Cavalry: +20% HP, +2 pierce armor' — or the player's own text."""
+    """'Cavalry: +20% HP, +2 pierce armor' — or the player's own text, with any
+    shortcodes turned into words (see TEXT_TOKENS)."""
     if card.get("text"):
-        return card["text"]
-    t = card["target"]
-    if t["type"] == "civ":
-        return ", ".join(_civ_effect_text(e, t.get("age")) for e in card["effects"])
-    subject = target_label(card["target"])
+        return game_text(card["text"])
+    targets = card["targets"]
+    if targets[0]["type"] == "civ":
+        return ", ".join(_civ_effect_text(e, targets[0].get("age")) for e in card["effects"])
+    subject = _join([target_subject(t) for t in targets])
+    # A job's own word for work rate ("gather rate") only when it is the only target.
+    named = targets[0] if len(targets) == 1 else None
+    return f"{subject}: " + ", ".join(effect_text(e, named) for e in card["effects"])
+
+
+def target_subject(t: dict) -> str:
+    """A target as card text names it: "Militia line", "Long Swordsman and up"."""
+    subject = target_label(t)
     if t["type"] == "unit" and t.get("kind") != "building":
         if t.get("scope") != "up":
             subject += " line"
         elif not t.get("top"):
             subject += " and up"
-    return f"{subject}: " + ", ".join(effect_text(e, card["target"]) for e in card["effects"])
+    return subject
+
+
+def _join(parts: list[str]) -> str:
+    """'Archers', 'Archers and Galleys', 'Archers, Galleys and Castles'."""
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
 
 
 # ── Effect commands ───────────────────────────────────────────────────────────
@@ -832,20 +938,36 @@ def _selectors(card: dict, line_of, resolve=None) -> list[tuple[int, int]]:
     `resolve(kind, arg)` answers the build-time questions ("trained_at",
     building id) and ("uu", None) for this civ.  Without `resolve` those parts
     resolve to nothing, which is what a pure test wants.
+
+    Each unit is addressed ONCE, however many targets reach it (#76).  A class
+    command already covers every unit of that class, so a unit one target names
+    by id is dropped when another target takes its whole class — Cavalry plus
+    the Knight line would otherwise give the Knight +20% HP twice, and two
+    multiplies compound.  `resolve("class_of", uid)` answers the class; without
+    it (a pure test) only identical ids collapse.
     """
-    t = card["target"]
+    classes: list[int] = []
+    ids: set[int] = set()
+    for t in card["targets"]:
+        c, i = _target_selectors(t, line_of, resolve)
+        classes += [k for k in c if k not in classes]
+        ids |= i
+    if classes and resolve:
+        ids = {uid for uid in ids if resolve("class_of", uid) not in classes}
+    return [(-1, cls) for cls in classes] + [(uid, -1) for uid in sorted(ids)]
+
+
+def _target_selectors(t: dict, line_of, resolve) -> tuple[list[int], set[int]]:
+    """(classes, unit ids) one target reaches."""
     if t["type"] == "job":
         # The exact pair, never an upgrade line — jobs don't upgrade.
-        return [(uid, -1) for uid in JOBS[t["id"]]["units"]]
+        return [], set(JOBS[t["id"]]["units"])
     if t["type"] != "group":
         if t.get("scope") == "up":
-            ids = resolve("up", t["id"]) if resolve else with_forms({t["id"]})
-        else:
-            ids = line_of(t["id"])
-        return [(uid, -1) for uid in sorted(ids)]
+            return [], set(resolve("up", t["id"]) if resolve else with_forms({t["id"]}))
+        return [], set(line_of(t["id"]))
 
     g = GROUPS[t["id"]]
-    pairs = [(-1, cls) for cls in g.get("classes", ())]
     ids: set[int] = set()
     if "units" in g:
         ids |= resolve("units", g["units"]) if resolve else with_forms(set(g["units"]))
@@ -855,7 +977,7 @@ def _selectors(card: dict, line_of, resolve=None) -> list[tuple[int, int]]:
         ids |= resolve("trained_at", g["trained_at"])
     if g.get("uu") and resolve:
         ids |= resolve("uu", None)
-    return pairs + [(uid, -1) for uid in sorted(ids)]
+    return list(g.get("classes", ())), ids
 
 
 def effect_commands(eff: dict, selectors: list[tuple[int, int]]) -> list[EffectCommand]:
@@ -896,19 +1018,21 @@ _RES_INDEX = {"food": 0, "wood": 1, "stone": 2, "gold": 3}   # EC_TECH_COST b
 
 
 def _tech_ids(card: dict, resolve=None) -> list[int]:
-    """Tech ids a tech card addresses — resolved to this civ when building."""
-    t = card["target"]
-    if t["type"] == "tech":
-        ids = resolve("techs", [t["id"]]) if resolve else {t["id"]}
-        return sorted(ids)
-    g = GROUPS[t["id"]]
+    """Tech ids a tech card addresses — resolved to this civ when building.
+    A set, so a tech two targets share (Forging is a Blacksmith tech AND a
+    melee attack upgrade) is changed once."""
     ids: set[int] = set()
-    if "techs" in g:
-        ids |= resolve("techs", g["techs"]) if resolve else set(g["techs"])
-    if "researched_at" in g and resolve:
-        ids |= resolve("researched_at", g["researched_at"])
-    if g.get("uts") and resolve:
-        ids |= resolve("uts", None)
+    for t in card["targets"]:
+        if t["type"] == "tech":
+            ids |= resolve("techs", [t["id"]]) if resolve else {t["id"]}
+            continue
+        g = GROUPS[t["id"]]
+        if "techs" in g:
+            ids |= resolve("techs", g["techs"]) if resolve else set(g["techs"])
+        if "researched_at" in g and resolve:
+            ids |= resolve("researched_at", g["researched_at"])
+        if g.get("uts") and resolve:
+            ids |= resolve("uts", None)
     return sorted(ids)
 
 
@@ -949,9 +1073,9 @@ def tech_effect_commands(eff: dict, tech_ids: list[int], costs_of=None) -> list[
 
 def card_commands(card: dict, line_of, resolve=None) -> list[EffectCommand]:
     """Every command one card writes, in card order.  See _selectors."""
-    if target_kind(card["target"]) == "civ":
+    if card_family(card) == "civ":
         return [c for step in civ_steps(card) for c in step["cmds"]]
-    if target_kind(card["target"]) == "tech":
+    if card_family(card) == "tech":
         tids = _tech_ids(card, resolve)
         costs_of = (lambda tid: resolve("tech_costs", tid)) if resolve else None
         cmds: list[EffectCommand] = []
@@ -984,6 +1108,68 @@ def card_commands(card: dict, line_of, resolve=None) -> list[EffectCommand]:
         else:
             cmds.extend(effect_commands(eff, sel))
     return cmds
+
+
+# ── Other homes for a card: team bonus (#54), unique tech (#75) ─────────────
+# A library card is written for the civ that picks it.  Two other places can
+# hold one, and each refuses what it can't build faithfully — the wizard greys
+# those cards out with this reason, and the build skips them with it.
+
+def team_problem(card: dict) -> str | None:
+    """Why this card can't be a team bonus, or None.
+
+    Team bonus commands go into the one Effect the engine runs for every
+    player on the team, so the card must mean the same thing for an ally:
+      * techs — allies research their own copies of some techs, and no
+        vanilla team bonus changes tech costs to copy from;
+      * the Civilization target — start resources and age grants are built as
+        gated techs (civ_steps), which a team bonus has no way to be;
+      * the Unique unit — it is resolved to OUR unique unit's ids;
+      * population space — the slot it lands in is readied on our buildings
+        only, so an ally's Market would gain nothing.
+    """
+    fam = card_family(card)
+    if fam == "tech":
+        return "Tech bonuses can't be team bonuses — allies research their own copies of some techs."
+    if fam == "civ":
+        return "Civilization bonuses can't be team bonuses — they're built as one-off events for this civ."
+    if any(t["type"] == "group" and GROUPS[t["id"]].get("uu") for t in card["targets"]):
+        return "\"Unique unit\" means this civ's unique unit, which allies don't train."
+    if any(e["attr"] == "pop_space" for e in card["effects"]):
+        return "Population space only works on this civ's own buildings."
+    return None
+
+
+def ut_problem(card: dict) -> str | None:
+    """Why this card can't be part of a unique tech, or None.
+
+    The card's commands are added to the unique tech's own Effect, so they run
+    once, when the tech is researched.  Civilization cards are not plain
+    commands: start resources wait for a Town Center and age grants for an
+    age, each as its own tech (civ_steps)."""
+    if card_family(card) == "civ":
+        return "Civilization bonuses can't go in a unique tech — they're tied to the start of the game or an age."
+    return None
+
+
+def card_key(card: dict) -> str:
+    """What makes two copies the same card: its library id, or — for a card
+    with none (an old or hand-made file) — its content."""
+    if card.get("id"):
+        return f"id:{card['id']}"
+    return "content:" + json.dumps({k: v for k, v in card.items() if k != "id"}, sort_keys=True)
+
+
+def placed_cards(raw, problem) -> tuple[list[dict], list[tuple[dict, str]]]:
+    """(usable cards, [(card, reason)] refused) for a team bonus or UT list."""
+    ok, refused = [], []
+    for card in normalize(raw):
+        why = problem(card)
+        if why:
+            refused.append((card, why))
+        else:
+            ok.append(card)
+    return ok, refused
 
 
 # ── Library ───────────────────────────────────────────────────────────────────
@@ -1034,7 +1220,7 @@ def unpack(data) -> list:
         return data["custom_bonuses"]
     if isinstance(data, list):
         return data
-    if isinstance(data, dict) and "target" in data:
+    if isinstance(data, dict) and ("target" in data or "targets" in data):
         return [data]
     return []
 

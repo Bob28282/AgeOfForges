@@ -54,7 +54,7 @@ reached = 0
 for label, lookup in (("castle", _KM_CASTLE_UT_TECHS), ("imperial", _KM_IMP_UT_TECHS)):
     bad = {}
     for km_id in sorted(lookup):
-        cmds, _, _ = _build_ut_effect_cmds(dat, [[km_id, 1]], label, lookup)
+        cmds, _, _ = _build_ut_effect_cmds(dat, [[km_id, 1]], label, label)
         if any(c.type in STAT and int(c.a) == KEEP_UNIT for c in cmds):
             reached += 1
         if missing(cmds):
@@ -64,12 +64,12 @@ check("the sweep saw the tower UTs (Yasama, Eupseong, Great Wall, ...)", reached
 
 # Yasama: the Keep's +2 arrows (attributes 102 and 107) on the Donjon
 yasama = next(k for k, t in _KM_CASTLE_UT_TECHS.items() if t == 484)
-cmds, _, _ = _build_ut_effect_cmds(dat, [[yasama, 1]], "castle", _KM_CASTLE_UT_TECHS)
+cmds, _, _ = _build_ut_effect_cmds(dat, [[yasama, 1]], "castle", "castle")
 check("Yasama gives the Donjon its extra arrows",
       {(4, 102), (4, 107)} <= {(c.type, int(c.c)) for c in cmds if int(c.a) == DONJON_UNIT})
 # Svan Towers already names the Donjon: not doubled
 svan = next(k for k, t in _KM_CASTLE_UT_TECHS.items() if t == 923)
-cmds, _, _ = _build_ut_effect_cmds(dat, [[svan, 1]], "castle", _KM_CASTLE_UT_TECHS)
+cmds, _, _ = _build_ut_effect_cmds(dat, [[svan, 1]], "castle", "castle")
 check("Svan Towers, which names the Donjon itself, is not doubled",
       sum(1 for c in cmds if int(c.a) == DONJON_UNIT) == 1)
 

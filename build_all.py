@@ -37,7 +37,8 @@ from civ_overrides import (_apply_uu_overrides, _apply_hero_unit, _override_ut_c
                            _refresh_uu_tooltips)
 from civ_appender import (apply_civ, assign_all_languages, patch_civilizations_list,
     DLL_CREATION_OFFSET, DLL_HELP_OFFSET, DLL_TECH_TREE_OFFSET,
-    get_civ_bonuses, get_team_bonuses, get_ut_entries, get_km_uu_index)
+    get_civ_bonuses, get_team_bonuses, get_ut_entries, get_km_uu_index,
+    team_card_texts, card_homes)
 from build_civ import (
     AI_PER_STUB, LANGUAGES, KM_TECHTREE_ORDER,
     _find_civ_slot, _civ_techtree_index, _civ_file_name,
@@ -340,11 +341,17 @@ def _ut_name(bonus_id: int | None, castle: bool) -> str:
     return "Castle Unique Technology" if castle else "Imperial Unique Technology"
 
 
-def _ut_bonus_id(civ_def: dict, group: int) -> int | None:
-    """Return the first bonus ID for a UT group, or None if absent."""
+def _ut_source(civ_def: dict, group: int) -> tuple[int | None, bool]:
+    """(preset id, is it a CASTLE preset) of a UT slot's first effect.
+
+    The pool is the entry's own, not the slot's: a Castle UT can be an
+    Imperial preset, and its name lives in the Imperial table.  No entry gives
+    (None, the slot's own pool), which _ut_name turns into the generic name."""
     which = "castle_ut" if group == 2 else "imperial_ut"
     entries = get_ut_entries(civ_def, which)
-    return int(entries[0][0]) if entries else None
+    if not entries:
+        return None, group == 2
+    return int(entries[0][0]), entries[0][2] == "castle"
 
 
 def _build_combined_data_zip(dat,
@@ -630,18 +637,16 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
         lang_assignments.append((civ_result["civ_index"], civ_result["lang_val"]))
 
         # Resolve UT names from bonus IDs.
-        castle_ut_bid = _ut_bonus_id(civ_def, 2)
-        imp_ut_bid    = _ut_bonus_id(civ_def, 3)
         # Empire Forge files carry the user's own UT name; only KM files need the
         # bonus-table lookup, which packs "Name (desc)" together and is keyed on
         # the FIRST effect's slot id. Matches app.py's two doors.
         castle_ut_name = (
             (civ_def.get("castle_ut") or {}).get("name")
-            or _ut_name(castle_ut_bid, castle=True)
+            or _ut_name(*_ut_source(civ_def, 2))
         )
         imp_ut_name = (
             (civ_def.get("imperial_ut") or {}).get("name")
-            or _ut_name(imp_ut_bid, castle=False)
+            or _ut_name(*_ut_source(civ_def, 3))
         )
         # Enrich civ_result with UT names so _patch_per_civ_techtree can update node labels.
         civ_result["castle_ut_name"] = castle_ut_name
@@ -759,7 +764,7 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
                 continue
             suffix = f" [x{mult}]" if mult > 1 else ""
             bullet_lines.append(f"• {txt}{suffix}")
-        for card in custom_bonus.normalize(civ_def.get("custom_bonuses")):
+        for card in card_homes(civ_def)["civ"]:
             bullet_lines.append("• " + custom_bonus.card_text(card).replace('"', "'"))
         desc_parts.append("\\n".join(bullet_lines))
         # Section break + UU
@@ -771,20 +776,21 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
                          for nm, ds in ((castle_ut_name, castle_ut_desc),
                                         (imp_ut_name, imp_ut_desc)))
         )
-        if team_bonus_entries:
-            tb_lines = []
-            for entry in team_bonus_entries:
-                if not isinstance(entry, list):
-                    continue
-                bid = str(entry[0])
-                txt = _TEAM_BONUS_NAMES.get(bid, "")
-                if txt:
-                    tb_lines.append(txt)
-            if tb_lines:
-                # Vanilla format: no bullets in Team Bonus; multiple bonuses
-                # are joined by "; " into one line of plain text.
-                desc_parts.append("\\n\\n<b>Team Bonus:<b> \\n")
-                desc_parts.append("; ".join(tb_lines))
+        tb_lines = []
+        for entry in team_bonus_entries:
+            if not isinstance(entry, list):
+                continue
+            bid = str(entry[0])
+            txt = _TEAM_BONUS_NAMES.get(bid, "")
+            if txt:
+                tb_lines.append(txt)
+        # Library cards picked as team bonuses (#54).
+        tb_lines += [_kv_text(t) for t in team_card_texts(civ_def)]
+        if tb_lines:
+            # Vanilla format: no bullets in Team Bonus; multiple bonuses
+            # are joined by "; " into one line of plain text.
+            desc_parts.append("\\n\\n<b>Team Bonus:<b> \\n")
+            desc_parts.append("; ".join(tb_lines))
         full_desc = "".join(desc_parts)
         # Strip trailing escape sequences and whitespace before the closing
         # quote. AoE2 DE's modded-strings parser rejects entries ending in a

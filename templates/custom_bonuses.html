@@ -57,8 +57,13 @@
 
             <label class="form-label small fw-semibold mb-1 d-block" for="cb-text">Card text
               <span class="text-muted fw-normal">(optional — leave blank to generate it)</span></label>
-            <input type="text" id="cb-text" class="form-control form-control-sm mb-2" maxlength="160" autocomplete="off">
-            <div class="cb-preview small mb-3"><span class="text-muted">In game:</span> <span id="cb-preview-text"></span></div>
+            <input type="text" id="cb-text" class="form-control form-control-sm mb-1" maxlength="160" autocomplete="off">
+            <div class="cb-token-row small mb-2"><span class="text-muted">Icons — click to insert; the card shows the icon, the game shows the word:</span>
+              <span id="cb-tokens"></span></div>
+            <div class="cb-preview-wrap mb-3">
+              <div class="cb-preview-card" id="cb-preview-card" aria-live="polite"></div>
+              <div class="cb-preview small"><span class="text-muted">In game:</span> <span id="cb-preview-text"></span></div>
+            </div>
             <div class="text-danger small mb-2 d-none" id="cb-error" role="alert"></div>
 
             <div class="d-flex gap-2">
@@ -67,7 +72,7 @@
             </div>
           </div>
 
-          <div id="cb-library-list" class="cb-list"></div>
+          <div id="cb-library-list" class="bonus-section cb-card-grid mb-3"></div>
 
           <button type="button" id="cb-new" class="btn btn-sm btn-outline-primary">
             <i class="fa-solid fa-plus me-1"></i>New custom bonus
@@ -81,7 +86,9 @@
         </div>
         <div class="card-body small">
           <ul class="mb-0">
-            <li><strong>One target, several effects.</strong> A group (Cavalry, Archers, Buildings…), a unit line (Militia line, Knight line…) or one unit and the upgrades after it, one building, a villager job, techs — a single tech, an upgrade set, everything at one building, or the ages — or the whole civilization, for its population limit and one-time resources.</li>
+            <li><strong>Targets and effects.</strong> A group (Cavalry, Archers, Buildings…), a unit line (Militia line, Knight line…) or one unit and the upgrades after it, one building, a villager job, techs — a single tech, an upgrade set, everything at one building, or the ages — or the whole civilization, for its population limit and one-time resources.</li>
+            <li><strong>Several targets.</strong> Click more tiles to add them — Archers and Galleys, Knights and Varangian Guards. Units, buildings and villager jobs mix; techs mix only with techs. Only the effects every target can take are offered, and a unit two targets both cover (Cavalry and the Knight line) gets the bonus once.</li>
+            <li><strong>Three places to use them.</strong> As a civ bonus, as a team bonus (step 4), or inside a <em>Build Custom</em> unique tech (steps 6–7), where it takes effect once researched. Tech, Civilization and Unique unit bonuses can't be team bonuses, and Civilization bonuses can't go in a unique tech.</li>
             <li><strong>Groups match the game's own.</strong> "Cavalry" covers exactly what the game's cavalry bonuses do — including cavalry archers.</li>
             <li><strong>Civs keep a copy.</strong> Picking a bonus in the wizard copies it into the civ, so a civ file you share works for anyone. Editing or deleting a library bonus doesn't change civs that already use it; the wizard offers to update them.</li>
             <li><strong>Where they're saved:</strong> <code id="cb-path">your Empire Forge data folder</code>

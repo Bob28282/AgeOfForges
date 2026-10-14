@@ -312,7 +312,7 @@ def diagnose_one(dat: DatFile, civ_def: dict,
         for e in castle_entries:
             bid  = int(e[0]) if isinstance(e, (list, tuple)) and e else "?"
             mult = int(e[1]) if isinstance(e, (list, tuple)) and len(e) > 1 else 1
-            print(f"    Source: {_ut_label(bid, mult, castle=True)}")
+            print(f"    Source: {_ut_label(bid, mult, castle=e[2] == 'castle')}")
         if c_tech is None:
             _warn("Castle UT: no tech created (entries missing from UT catalog?)", warnings)
             print("    ⚠  No tech created")
@@ -335,7 +335,7 @@ def diagnose_one(dat: DatFile, civ_def: dict,
         for e in imp_entries:
             bid  = int(e[0]) if isinstance(e, (list, tuple)) and e else "?"
             mult = int(e[1]) if isinstance(e, (list, tuple)) and len(e) > 1 else 1
-            print(f"    Source: {_ut_label(bid, mult, castle=False)}")
+            print(f"    Source: {_ut_label(bid, mult, castle=e[2] == 'castle')}")
         if i_tech is None:
             _warn("Imperial UT: no tech created (entries missing from UT catalog?)", warnings)
             print("    ⚠  No tech created")

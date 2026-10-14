@@ -4,10 +4,11 @@
  *   /builder/custom-bonuses  the library: add, edit, delete, import, export
  *   /builder (wizard)        step 3 picks library cards into the civ
  *
- * A card is one target plus a list of effects, in exactly the shape
+ * A card is one or more targets plus a list of effects, in exactly the shape
  * custom_bonus.py normalises:
- *   {id, target: {type:"group", id:"cavalry"} | {type:"unit", id, name, kind},
+ *   {id, targets: [{type:"group", id:"cavalry"} | {type:"unit", id, name, kind}, ...],
  *    effects: [{attr, op, value, resource?}], text}
+ * Cards from before #76 have a single `target`; cbTargets() reads either.
  *
  * Groups and attributes come from /api/builder/custom-bonus/catalog so the two
  * sides can't drift; cbCardText mirrors custom_bonus.card_text.
@@ -65,6 +66,12 @@ function cbEsc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// A card's targets, whichever shape it was saved in.
+function cbTargets(card) {
+  if (Array.isArray(card?.targets)) return card.targets;
+  return card?.target ? [card.target] : [];
+}
+
 function _cbTargetKind(t) {
   if (!t) return "unit";
   if (t.type === "group") return _cbGroup(t.id)?.kind || "unit";
@@ -81,6 +88,35 @@ function _cbTargetLabel(t) {
   if (t.type === "tech") return t.name || `Tech ${t.id}`;
   if (t.type === "civ") return "Civilization";
   return t.name || `Unit ${t.id}`;
+}
+
+// Which targets can share a card (mirrors custom_bonus.target_family): units,
+// buildings and villager jobs mix; techs only with techs; Civilization alone.
+function _cbFamily(t) {
+  const k = _cbTargetKind(t);
+  return k === "tech" || k === "civ" ? k : "stats";
+}
+
+function _cbJoin(parts) {
+  return parts.length < 2 ? (parts[0] || "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
+// Why a card can't be a team bonus / part of a unique tech, or "" — mirrors
+// custom_bonus.team_problem / ut_problem, which the build enforces.
+function cbTeamProblem(card) {
+  const ts = cbTargets(card);
+  const fam = ts.length ? _cbFamily(ts[0]) : "stats";
+  if (fam === "tech") return "Tech bonuses can't be team bonuses — allies research their own copies of some techs.";
+  if (fam === "civ") return "Civilization bonuses can't be team bonuses — they're built as one-off events for this civ.";
+  if (ts.some(t => t.type === "group" && t.id === "unique_unit")) return "\"Unique unit\" means this civ's unique unit, which allies don't train.";
+  if ((card.effects || []).some(e => e.attr === "pop_space")) return "Population space only works on this civ's own buildings.";
+  return "";
+}
+
+function cbUtProblem(card) {
+  const ts = cbTargets(card);
+  if (ts.length && _cbFamily(ts[0]) === "civ") return "Civilization bonuses can't go in a unique tech — they're tied to the start of the game or an age.";
+  return "";
 }
 
 // What a card is about, as its text says it (mirrors custom_bonus.card_text):
@@ -118,13 +154,30 @@ function _cbEffectText(e, target) {
   return `${sign}${num} ${label}`;
 }
 
+// Shortcodes in the player's own text ("[gold]") — the table is
+// custom_bonus.TEXT_TOKENS, served in the catalog, so the browser and the build
+// can't disagree.  cbGameText is what the game shows ("gold"); _cbTokensHtml
+// draws the icon on a card.  An unknown "[word]" stays as typed on both.
+function cbGameText(text) {
+  const tokens = _cbCatalog?.tokens || {};
+  return String(text).replace(/\[(\w+)\]/g, (m, tok) => tokens[tok]?.word ?? m);
+}
+
+function _cbTokensHtml(escaped) {
+  const tokens = _cbCatalog?.tokens || {};
+  return escaped.replace(/\[(\w+)\]/g, (m, tok) => tokens[tok]
+    ? `<img class="resource-icon icon-${tok}" src="${tokens[tok].icon}" alt="${cbEsc(tokens[tok].word)}" title="${cbEsc(tokens[tok].word)}">`
+    : m);
+}
+
 function cbCardText(card) {
-  if (card.text) return card.text;
-  if (card.target?.type === "civ") {
+  if (card.text) return cbGameText(card.text);
+  const targets = cbTargets(card);
+  if (targets[0]?.type === "civ") {
     // Mirrors custom_bonus._civ_effect_text: "+25 population limit in the
     // Imperial Age", "+100 stone at the start", "+200 wood on reaching the
     // Castle Age" (#65).
-    const age = (_cbCatalog?.civ_ages || []).find(a => a.id === card.target.age);
+    const age = (_cbCatalog?.civ_ages || []).find(a => a.id === targets[0].age);
     return (card.effects || []).filter(e => e.value != null && !isNaN(e.value) && e.value !== 0).map(e => {
       const num = `${e.value > 0 ? "+" : "-"}${_cbNum(Math.abs(e.value))}`;
       if (e.attr === "resources") {
@@ -139,16 +192,187 @@ function cbCardText(card) {
       return `${num} ${_cbAttr(e.attr)?.label || e.attr}` + (age ? ` in the ${age.label}` : "");
     }).join(", ");
   }
-  const subject = _cbSubject(card.target);
-  const parts = (card.effects || []).map(e => _cbEffectText(e, card.target)).filter(Boolean);
+  const subject = _cbJoin(targets.map(_cbSubject));
+  // A job's own word for work rate ("gather rate") only when it's the only target.
+  const named = targets.length === 1 ? targets[0] : null;
+  const parts = (card.effects || []).map(e => _cbEffectText(e, named)).filter(Boolean);
   return parts.length ? `${subject}: ${parts.join(", ")}` : subject;
 }
 
 // Content equality, ignoring the id — "has the library card changed since this
 // civ copied it?"
 function cbSameCard(a, b) {
-  const strip = c => JSON.stringify({ target: c.target, effects: c.effects, text: c.text || "" });
+  const strip = c => JSON.stringify({ targets: cbTargets(c), effects: c.effects, text: c.text || "" });
   return strip(a) === strip(b);
+}
+
+// ── Cards ────────────────────────────────────────────────────────────────────
+// A custom bonus drawn as a wizard bonus card, so it reads as one of the
+// game's own.  The vanilla cards GUESS their layout by parsing label text
+// (builder.js _parseBonusCard); a custom card knows its target, attribute and
+// value, so its layout is exact:
+//   one effect, no player text   value card — heading "+20%", stat "HP",
+//                                footer "Cavalry"
+//   several effects, or text     stacked lines, one per effect (or per ";")
+// Art comes from the targets (the composer's own tiles): one icon, or the
+// first two side by side.  No multiplier: the player types the amount, and a
+// multiplier on a MULTIPLY would compound (x3 on +20% is +72.8%, not +60%).
+// The category follows the vanilla cards' first-match order (naval, monk,
+// cost, economy, speed, combat, research, building) from the card's data.
+
+const _CB_CATS = {
+  naval: "fa-anchor", monk: "fa-cross", cost: "fa-arrow-down", economy: "fa-coins",
+  speed: "fa-bolt", combat: "fa-shield-halved", research: "fa-flask",
+  building: "fa-chess-rook", general: "fa-shield",
+};
+const _CB_NAVAL_GROUPS = new Set(["ships", "warships", "dock_units"]);
+const _CB_ECO_GROUPS   = new Set(["villagers", "economic", "drop_off", "farms", "trade"]);
+const _CB_COST_ATTRS   = new Set(["cost", "tech_cost", "free"]);
+const _CB_SPEED_ATTRS  = new Set(["speed", "attack_speed", "train_speed", "build_speed",
+                                  "research_speed", "work_rate", "instant"]);
+const _CB_COMBAT_ATTRS = new Set(["hp", "melee_armor", "pierce_armor", "melee_attack", "pierce_attack",
+                                  "range", "los", "min_range", "no_min_range", "blast_radius", "regen"]);
+const _CB_DOCK = 45;
+
+function _cbUnitEntry(id) { return (_cbCatalog?.units || []).find(u => u.id === id); }
+function _cbLineEntry(id) { return (_cbCatalog?.lines || []).find(l => l.id === id); }
+
+function _cbIsNaval(t) {
+  if (t.type === "group") return _CB_NAVAL_GROUPS.has(t.id);
+  if (t.type !== "unit") return false;
+  if (t.kind === "building") return t.id === _CB_DOCK;
+  return _cbLineEntry(t.id)?.building === _CB_DOCK || _cbUnitEntry(t.id)?.category === "dock";
+}
+
+function _cbIsEconomy(t) {
+  return t.type === "job" || (t.type === "group" && _CB_ECO_GROUPS.has(t.id));
+}
+
+function cbCardCategory(card) {
+  const ts = cbTargets(card);
+  const fx = card.effects || [];
+  const all = set => fx.length > 0 && fx.every(e => set.has(e.attr));
+  const fam = ts.length ? _cbFamily(ts[0]) : "stats";
+  if (fam === "civ") {
+    if (fx.every(e => e.attr.startsWith("convert"))) return "monk";
+    return fx.some(e => e.attr === "resources") ? "economy" : "general";
+  }
+  if (fam === "tech") {
+    if (all(_CB_COST_ATTRS)) return "cost";
+    if (all(_CB_SPEED_ATTRS)) return "speed";
+    return "research";
+  }
+  if (ts.length && ts.every(_cbIsNaval)) return "naval";
+  if (ts.length && ts.every(t => t.type === "group" && (t.id === "monks" || t.id === "churches"))) return "monk";
+  if (all(_CB_COST_ATTRS)) return "cost";
+  if (ts.length && ts.every(_cbIsEconomy)) return "economy";
+  if (all(_CB_SPEED_ATTRS)) return "speed";
+  if (fx.some(e => _CB_COMBAT_ATTRS.has(e.attr))) return "combat";
+  if (ts.length && ts.every(t => _cbTargetKind(t) === "building")) return "building";
+  return "general";
+}
+
+// A target's art: an image URL or a Font Awesome class.  Units, lines,
+// buildings and techs need the DAT-backed half of the catalog; until it has
+// loaded, they fall back to the wand.
+function _cbTargetArt(t) {
+  const c = _cbCatalog || {};
+  if (t.type === "group") return _cbGroup(t.id)?.icon;
+  if (t.type === "job")   return _cbJob(t.id)?.icon;
+  if (t.type === "civ")   return "fa-landmark";
+  if (t.type === "tech")  return (c.techs || []).find(x => x.id === t.id)?.icon;
+  if (t.kind === "building") return (c.buildings || []).find(x => x.id === t.id)?.icon;
+  return (t.scope !== "up" && _cbLineEntry(t.id)?.icon) || _cbUnitEntry(t.id)?.icon;
+}
+
+function _cbArtHtml(art, alt) {
+  if (!art || art.startsWith("fa-")) {
+    return `<span class="card-icon cb-card-icon--fa" aria-hidden="true"><i class="fa-solid ${art || "fa-wand-magic-sparkles"}"></i></span>`;
+  }
+  return `<img class="card-icon" src="${cbEsc(art)}" alt="${cbEsc(alt)}" onerror="this.style.visibility='hidden'">`;
+}
+
+// One effect as heading + stat, mirroring _cbEffectText's wording.
+function _cbHeadline(e, target) {
+  const a = _cbAttr(e.attr);
+  if (!a) return { heading: "", stat: "" };
+  if (a.novalue) {
+    return { free: { heading: "Free", stat: "and instant" }, instant: { heading: "Instant", stat: "research" },
+             no_min_range: { heading: "None", stat: "minimum range" } }[e.attr]
+        || { heading: a.label, stat: "" };
+  }
+  const v = Number(e.value);
+  const sign = v > 0 ? "+" : "-";
+  const num = _cbNum(Math.abs(v));
+  if (_CB_FASTER[e.attr]) return { heading: `${num}%`, stat: `${_CB_FASTER[e.attr]} ${v > 0 ? "faster" : "slower"}` };
+  if (_CB_COST.has(e.attr)) {
+    const res = e.resource || "all";
+    const pct = e.attr === "cost" || e.op === "mul" ? "%" : "";
+    return { heading: `${sign}${num}${pct}`, stat: res === "all" ? "cost" : `${res} cost` };
+  }
+  const label = e.attr === "work_rate" && target?.type === "job" ? (_cbJob(target.id)?.work || a.label) : a.label;
+  return { heading: `${sign}${num}${e.op === "mul" ? "%" : ""}`, stat: label };
+}
+
+// The hover tooltip's text (tooltip.js): what the card does as the game will
+// say it, then what each target covers — the composer's own hint, so "Galley
+// line" spells out Galley, War Galley, Galleon — and why it's greyed out.
+function _cbTipText(card, why) {
+  const ts = cbTargets(card);
+  const lines = [cbCardText(card)];
+  for (const t of ts) {
+    if (t.type === "civ") continue;              // its card text already says it all
+    const hint = _cbTargetHint(t);
+    if (hint) lines.push(ts.length > 1 ? `${_cbSubject(t)}: ${hint}` : hint);
+  }
+  if (why) lines.push(why);
+  return lines.join("\n");
+}
+
+// The card's markup: the same structure and classes as a vanilla bonus card
+// (builder.js _renderBonusCardInner), so it inherits every card style.
+// opts: { selected, off, why, actions, attrs, extraClass } — `actions` is extra HTML under
+// the footer; `attrs` extra attributes on the root element.
+function cbCardHtml(card, opts = {}) {
+  const targets = cbTargets(card);
+  const cat  = cbCardCategory(card);
+  const only = targets.length === 1 ? targets[0] : null;
+  const art  = targets.slice(0, 2).map(t => _cbArtHtml(_cbTargetArt(t), _cbTargetLabel(t)));
+  const icons = art.length > 1 ? `<div class="card-icon-row">${art.join("")}</div>` : (art[0] || "");
+  const civ = targets[0]?.type === "civ";
+  const footer = civ ? "Civilization" : _cbJoin(targets.map(_cbSubject));
+  const fx = card.effects || [];
+
+  let middle;
+  if (!card.text && !civ && fx.length === 1) {
+    const h = _cbHeadline(fx[0], only);
+    middle = `<div class="card-heading">${cbEsc(h.heading)}</div><div class="card-stat">${cbEsc(h.stat)}</div>`;
+  } else {
+    // Player text splits on ";" like the vanilla desc cards; generated text is
+    // one line per effect (a Civilization card's own phrasing, comma-joined).
+    const lines = card.text ? card.text.split(";")
+                : civ ? cbCardText(card).split(", ")
+                : fx.map(e => _cbEffectText(e, only));
+    middle = `<ul class="card-desc-lines">${lines.map(l => l.trim()).filter(Boolean)
+      .map(l => `<li class="desc-line">${_cbTokensHtml(cbEsc(l))}</li>`).join("")}</ul>`;
+  }
+  const cls = ["bonus-card", "cb-card", card.text || civ || fx.length !== 1 ? "desc-bonus" : "",
+               opts.selected ? "selected" : "", opts.off ? "cb-card--off" : "", opts.extraClass || ""]
+    .filter(Boolean).join(" ");
+  const label = `${cat.charAt(0).toUpperCase()}${cat.slice(1)}`;
+  return `<div class="${cls}" data-cat="${cat}" style="--cat-color:var(--cat-${cat})"
+      data-tip-title="${cbEsc(`${label} · Custom bonus`)}" data-tip="${cbEsc(_cbTipText(card, opts.why))}" ${opts.attrs || ""}>
+    <div class="card-header"><div><i class="fa-solid ${_CB_CATS[cat]}"></i><span class="bonus-type">${label}</span></div>
+      <img class="cb-card-badge" src="/static/gold-seal.png" alt="Custom bonus"></div>
+    <div class="card-body">
+      ${icons}
+      ${middle}
+      <div class="card-who"><span class="card-who-label">${cbEsc(footer)}</span></div>
+      ${opts.why ? `<div class="cb-card-why">${cbEsc(opts.why)}</div>` : ""}
+      ${opts.actions || ""}
+    </div>
+    <div class="card-shadow"></div><div class="top-corners"></div><div class="bottom-corners"></div>
+  </div>`;
 }
 
 // ── Editor ───────────────────────────────────────────────────────────────────
@@ -157,6 +381,14 @@ function cbSameCard(a, b) {
 
 let _cbWork   = null;
 let _cbOnSave = null;
+
+// The effects a card's targets can take: the ones EVERY target takes (#76), so
+// Archers + Castles offers range but not movement speed.
+function _cbAttrsForAll(targets) {
+  if (!targets?.length) return _cbAttrsFor(null);
+  const lists = targets.map(t => new Set(_cbAttrsFor(t).map(a => a.id)));
+  return _cbAttrsFor(targets[0]).filter(a => lists.every(l => l.has(a.id)));
+}
 
 // The effects a target can take: its kind's, narrowed to the ones that change
 // a stat some unit it reaches has (no garrison space on Villagers, no range on
@@ -176,7 +408,9 @@ function _cbAttrsFor(target) {
 }
 
 // ── Target picker: Group | Unit | Villager | Building tabs over icon tiles ──
-// One tab shows at a time, so only one target can ever be chosen.
+// Clicking a tile adds or removes it (#76).  Tiles that can't share a card with
+// what's chosen (a tech beside units, anything beside Civilization) are greyed
+// out until the choice is cleared.
 
 let _cbTab      = "group";
 let _cbCategory = "";        // Unit tab filter chip ("" = all)
@@ -185,7 +419,8 @@ let _cbCategory = "";        // Unit tab filter chip ("" = all)
 // villager, but where someone looking for fishing bonuses will look.
 const _CB_FISHING_SHIP = 13;
 
-function _cbTabOf(t) {
+function _cbTabOf(targets) {
+  const t = targets?.[0];
   if (!t) return _cbTab;
   if (t.type === "job") return "villager";
   if (t.type === "tech") return "tech";
@@ -224,7 +459,8 @@ function _cbTilesFor(tab) {
   if (tab === "group") return sectioned(c.groups.filter(g => g.tab === "group"));
   if (tab === "civ") {
     // Keep the age already chosen when the tile is clicked again.
-    const age = _cbWork?.target?.type === "civ" ? _cbWork.target.age : undefined;
+    const cur = _cbWork?.targets?.[0];
+    const age = cur?.type === "civ" ? cur.age : undefined;
     return [{ target: { type: "civ", id: "civ", ...(age ? { age } : {}) },
               label: "Whole civilization", icon: "fa-landmark" }];
   }
@@ -275,11 +511,22 @@ function _cbTilesFor(tab) {
 }
 
 function _cbRenderPicker() {
-  // The choice stays visible while browsing another tab.
+  // The choice stays visible while browsing another tab.  Each target is a chip
+  // that removes itself; Clear starts over (and is the way out of a family).
   const chosen = document.getElementById("cb-target-chosen");
-  chosen.innerHTML = _cbWork.target
-    ? `<i class="fa-solid fa-check me-1"></i>${cbEsc(_cbSubject(_cbWork.target))}`
-    : `<span class="text-muted fw-normal">— pick one below</span>`;
+  const targets = _cbWork.targets;
+  chosen.innerHTML = targets.length
+    ? targets.map((t, i) => `<span class="cb-chosen-chip"><i class="fa-solid fa-check me-1"></i>${cbEsc(_cbSubject(t))}`
+        + `<button type="button" class="cb-chosen-x" data-i="${i}" title="Remove" aria-label="Remove ${cbEsc(_cbSubject(t))}"><i class="fa-solid fa-xmark"></i></button></span>`).join("")
+      + (targets.length > 1 ? `<button type="button" class="btn btn-sm btn-link p-0 ms-1 cb-chosen-clear">Clear</button>` : "")
+    : `<span class="text-muted fw-normal">— pick one or more below</span>`;
+  chosen.querySelectorAll(".cb-chosen-x").forEach(b => b.addEventListener("click", () =>
+    _cbToggleTarget(targets[parseInt(b.dataset.i, 10)])));
+  chosen.querySelector(".cb-chosen-clear")?.addEventListener("click", () => {
+    _cbWork.targets = [];
+    _cbTargetsChanged();
+  });
+  const family = targets.length ? _cbFamily(targets[0]) : null;
   document.querySelectorAll(".cb-tab").forEach(b => {
     const on = b.dataset.tab === _cbTab;
     b.classList.toggle("active", on);
@@ -310,12 +557,15 @@ function _cbRenderPicker() {
   grid.classList.toggle("cb-tiles--big", !searchable);
   grid.innerHTML = tiles.map((t, i) => {
     if (t.heading) return `<div class="cb-section">${cbEsc(t.heading)}</div>`;
-    const on = _cbSameTarget(t.target, _cbWork.target);
-    return `<button type="button" class="cb-tile${on ? " selected" : ""}" data-i="${i}" aria-pressed="${on}" title="${cbEsc(t.label)}">
+    const on = targets.some(x => _cbSameTarget(t.target, x));
+    // Civilization is one target on its own; anything else mixes within its family.
+    const off = !on && family && (family !== _cbFamily(t.target) || family === "civ");
+    const title = off ? `${t.label} — can't share a bonus with ${family === "civ" ? "the whole civilization" : family === "tech" ? "techs" : "units or buildings"}. Clear the choice first.` : t.label;
+    return `<button type="button" class="cb-tile${on ? " selected" : ""}${off ? " cb-tile--off" : ""}" data-i="${i}" aria-pressed="${on}"${off ? " disabled" : ""} title="${cbEsc(title)}">
       ${_cbIcon(t.icon, t.label)}<span class="cb-tile-label">${cbEsc(t.label)}</span></button>`;
   }).join("") || `<div class="text-muted small fst-italic p-2">Nothing matches that search.</div>`;
   grid.querySelectorAll(".cb-tile").forEach(el => el.addEventListener("click", () =>
-    _cbSetTarget(tiles[parseInt(el.dataset.i, 10)].target)));
+    _cbToggleTarget(tiles[parseInt(el.dataset.i, 10)].target)));
 }
 
 function _cbTargetHint(t) {
@@ -372,30 +622,51 @@ function _cbTargetHint(t) {
               : "Applies to the whole upgrade line and any alternate forms — e.g. Knight also covers Cavalier and Paladin.";
 }
 
-function _cbSetTarget(target) {
-  _cbWork.target = target;
-  document.getElementById("cb-target-hint").textContent = _cbTargetHint(target);
-  // Drop effects the new target can't take (movement speed on a building, HP on
-  // a villager job) — the server enforces the same list.
-  const ok = new Set(_cbAttrsFor(target).map(a => a.id));
+function _cbToggleTarget(target) {
+  const at = _cbWork.targets.findIndex(x => _cbSameTarget(x, target));
+  if (at >= 0) _cbWork.targets.splice(at, 1);
+  else if (target.type === "civ") _cbWork.targets = [target];
+  else _cbWork.targets.push(target);
+  _cbLastTarget = at >= 0 ? _cbWork.targets.at(-1) || null : target;
+  _cbTargetsChanged();
+}
+
+function _cbTargetsChanged() {
+  _cbShowHint();
+  // Drop effects the targets can't all take (movement speed on a building, HP
+  // on a villager job) — the server enforces the same list.
+  const ok = new Set(_cbAttrsForAll(_cbWork.targets).map(a => a.id));
   _cbWork.effects = _cbWork.effects.filter(e => ok.has(e.attr));
-  if (!_cbWork.effects.length) _cbWork.effects.push(_cbNewEffect());
+  if (!_cbWork.effects.length && _cbWork.targets.length) _cbWork.effects.push(_cbNewEffect());
   _cbError("");
   _cbRenderPicker();
   _cbRenderEffects();
+}
+
+// The hint describes the target just picked; with several, it also says why
+// some effects are missing.
+let _cbLastTarget = null;
+function _cbShowHint() {
+  const ts = _cbWork.targets;
+  const t = ts.find(x => _cbSameTarget(x, _cbLastTarget || {})) || ts.at(-1);
+  const many = ts.length > 1
+    ? " With several targets, only the effects every one of them can take are offered, and a unit two targets share gets the bonus once."
+    : "";
+  document.getElementById("cb-target-hint").textContent = (t ? _cbTargetHint(t) : "") + many;
 }
 
 function _cbRenderEffects() {
   const wrap  = document.getElementById("cb-effects");
   // A saved card keeps an effect the target no longer offers, so editing it
   // never swaps that effect for another one silently.
-  const offered = _cbAttrsFor(_cbWork.target);
+  const offered = _cbAttrsForAll(_cbWork.targets);
   const kept = _cbWork.effects.map(e => e.attr)
     .filter(id => !offered.some(a => a.id === id)).map(_cbAttr).filter(Boolean);
   const attrs = [...offered, ...kept];
   wrap.innerHTML = _cbWork.effects.map((e, i) => {
     const a = _cbAttr(e.attr);
-    const job = _cbWork.target?.type === "job" ? _cbJob(_cbWork.target.id) : null;
+    const only = _cbWork.targets.length === 1 ? _cbWork.targets[0] : null;
+    const job = only?.type === "job" ? _cbJob(only.id) : null;
     const nameOf = x => (x.id === "work_rate" && job) ? job.work : x.label;   // "build speed"
     const attrOpts = attrs.map(x => {
       const n = nameOf(x);
@@ -432,16 +703,17 @@ function _cbRenderEffects() {
 
   // A Civilization card can wait for an age (#65), like vanilla's
   // "+10 population in Imperial Age".
-  if (_cbWork.target?.type === "civ") {
+  const civT = _cbWork.targets[0]?.type === "civ" ? _cbWork.targets[0] : null;
+  if (civT) {
     const ages = [{ id: "", label: "the start (Dark Age)" }, ...(_cbCatalog.civ_ages || [])];
     wrap.insertAdjacentHTML("beforeend", `<div class="cb-age-row d-flex align-items-center gap-2 mt-1 small">
       <span class="text-muted">From</span>
       <select class="form-select form-select-sm cb-age" style="max-width:14rem">${ages.map(a =>
-        `<option value="${a.id}"${String(a.id) === String(_cbWork.target.age || "") ? " selected" : ""}>${cbEsc(a.label)}</option>`).join("")}</select>
+        `<option value="${a.id}"${String(a.id) === String(civT.age || "") ? " selected" : ""}>${cbEsc(a.label)}</option>`).join("")}</select>
     </div>`);
     wrap.querySelector(".cb-age").addEventListener("change", ev => {
       const v = parseInt(ev.target.value, 10);
-      if (isNaN(v)) delete _cbWork.target.age; else _cbWork.target.age = v;
+      if (isNaN(v)) delete civT.age; else civT.age = v;
       _cbRenderPicker();
       _cbUpdatePreview();
     });
@@ -476,7 +748,7 @@ function _cbRenderEffects() {
 
 function _cbNewEffect() {
   const used  = new Set(_cbWork.effects.map(e => e.attr));
-  const attrs = _cbAttrsFor(_cbWork.target);
+  const attrs = _cbAttrsForAll(_cbWork.targets);
   const a = attrs.find(x => !used.has(x.id)) || attrs[0];
   return { attr: a.id, op: a.id === "hp" ? "mul" : a.ops[0], value: null,
            ...(a.id === "resources" ? { resource: "gold" } : {}) };
@@ -484,24 +756,40 @@ function _cbNewEffect() {
 
 function _cbUpdatePreview() {
   const textEl = document.getElementById("cb-text");
-  const out = cbCardText({ ..._cbWork, text: textEl.value.trim() });
-  document.getElementById("cb-preview-text").textContent = _cbWork.target ? `• ${out}` : "—";
+  const work = { ..._cbWork, text: textEl.value.trim() };
+  const out = cbCardText(work);
+  document.getElementById("cb-preview-text").textContent = _cbWork.targets.length ? `• ${out}` : "—";
   textEl.placeholder = cbCardText({ ..._cbWork, text: "" });
+  // The card as the wizard will show it — only the effects with an amount.
+  const card = document.getElementById("cb-preview-card");
+  if (card) {
+    const effects = work.effects.filter(e => _cbAttr(e.attr)?.novalue || (e.value != null && !isNaN(e.value) && e.value !== 0));
+    card.innerHTML = _cbWork.targets.length && effects.length
+      ? cbCardHtml({ ...work, effects })
+      : `<div class="text-muted small fst-italic">Pick a target and an amount to see the card.</div>`;
+  }
 }
 
 async function cbOpenEditor(card, onSave) {
   if (!await cbLoadCatalog()) return;
   _cbOnSave = onSave;
-  _cbWork = card ? JSON.parse(JSON.stringify(card)) : { target: null, effects: [], text: "" };
-  _cbTab = _cbTabOf(_cbWork.target);
+  _cbWork = card ? JSON.parse(JSON.stringify(card)) : { effects: [], text: "" };
+  _cbWork.targets = cbTargets(_cbWork);
+  delete _cbWork.target;
+  _cbLastTarget = null;
+  _cbTab = _cbTabOf(_cbWork.targets);
   _cbCategory = "";
   document.getElementById("cb-search").value = "";
   _cbRenderPicker();
-  document.getElementById("cb-target-hint").textContent = _cbTargetHint(_cbWork.target);
+  _cbShowHint();
   document.getElementById("cb-text").value = _cbWork.text || "";
+  const chips = document.getElementById("cb-tokens");
+  if (chips) chips.innerHTML = Object.entries(_cbCatalog.tokens || {}).map(([tok, t]) =>
+    `<button type="button" class="cb-token" data-token="${tok}" title="[${tok}] — reads “${cbEsc(t.word)}” in game">
+       <img src="${t.icon}" alt="">${tok}</button>`).join("");
   document.getElementById("cb-error").classList.add("d-none");
   document.getElementById("cb-editor-title").textContent = card ? "Edit bonus" : "New bonus";
-  if (!_cbWork.effects.length) _cbWork.effects.push(_cbNewEffect());
+  if (!_cbWork.effects.length && _cbWork.targets.length) _cbWork.effects.push(_cbNewEffect());
   _cbRenderEffects();
   document.getElementById("cb-editor").classList.remove("d-none");
   document.getElementById("cb-new")?.classList.add("d-none");
@@ -521,7 +809,7 @@ function _cbError(msg) {
 }
 
 async function _cbSave() {
-  if (!_cbWork.target) return _cbError("Choose who this bonus applies to.");
+  if (!_cbWork.targets.length) return _cbError("Choose who this bonus applies to.");
   const effects = _cbWork.effects.filter(e =>
     _cbAttr(e.attr)?.novalue || (e.value !== null && e.value !== undefined && e.value !== 0 && !isNaN(e.value)));
   if (!effects.length) return _cbError("Add at least one effect with a non-zero amount.");
@@ -536,7 +824,7 @@ async function _cbSave() {
       (negative.attr === "pop_cap" ? " — the game ignores a lower limit." : "."));
   }
   const card = {
-    target:  _cbWork.target,
+    targets: _cbWork.targets,
     effects: effects.map(e => {
       if (_cbAttr(e.attr)?.novalue) return { attr: e.attr, op: "set" };
       const out = { attr: e.attr, op: e.op, value: e.value };
@@ -564,6 +852,18 @@ function cbWireEditor() {
     _cbRenderEffects();
   });
   document.getElementById("cb-text").addEventListener("input", _cbUpdatePreview);
+  // Shortcode chips: insert "[gold]" at the cursor.
+  document.getElementById("cb-tokens")?.addEventListener("click", ev => {
+    const chip = ev.target.closest("[data-token]");
+    if (!chip) return;
+    const input = document.getElementById("cb-text");
+    const at = input.selectionStart ?? input.value.length;
+    const code = `[${chip.dataset.token}]`;
+    input.value = (input.value.slice(0, at) + code + input.value.slice(input.selectionEnd ?? at)).slice(0, 160);
+    input.focus();
+    input.setSelectionRange(at + code.length, at + code.length);
+    _cbUpdatePreview();
+  });
   document.querySelectorAll(".cb-tab").forEach(b => b.addEventListener("click", () => {
     _cbTab = b.dataset.tab;
     _cbCategory = "";
@@ -607,15 +907,15 @@ async function _cbLibraryPage() {
       list.innerHTML = `<div class="text-muted small fst-italic py-3">No custom bonuses yet — make one, or import a file someone shared with you.</div>`;
       return;
     }
-    list.innerHTML = library.map(c => `
-      <div class="cb-row" data-id="${cbEsc(c.id)}">
-        <i class="fa-solid fa-wand-magic-sparkles cb-row-icon"></i>
-        <span class="cb-row-text">${cbEsc(cbCardText(c))}</span>
-        <a class="btn btn-sm btn-link" href="/api/custom-bonuses/export?ids=${encodeURIComponent(c.id)}" title="Download to share"><i class="fa-solid fa-download"></i></a>
-        <button type="button" class="btn btn-sm btn-link cb-edit" title="Edit"><i class="fa-solid fa-pen"></i></button>
-        <button type="button" class="btn btn-sm btn-link text-danger cb-remove" title="Delete"><i class="fa-solid fa-trash"></i></button>
-      </div>`).join("");
-    list.querySelectorAll(".cb-row").forEach(row => {
+    list.innerHTML = library.map(c => cbCardHtml(c, {
+      attrs: `data-id="${cbEsc(c.id)}"`,
+      actions: `<div class="cb-card-actions">
+        <a class="btn btn-sm btn-link" href="/api/custom-bonuses/export?ids=${encodeURIComponent(c.id)}" title="Download to share" aria-label="Download to share"><i class="fa-solid fa-download"></i></a>
+        <button type="button" class="btn btn-sm btn-link cb-edit" title="Edit" aria-label="Edit"><i class="fa-solid fa-pen"></i></button>
+        <button type="button" class="btn btn-sm btn-link text-danger cb-remove" title="Delete" aria-label="Delete"><i class="fa-solid fa-trash"></i></button>
+      </div>`,
+    })).join("");
+    list.querySelectorAll(".cb-card[data-id]").forEach(row => {
       const card = library.find(c => c.id === row.dataset.id);
       row.querySelector(".cb-edit").addEventListener("click", () => cbOpenEditor(card, async saved => {
         await cbSaveToLibrary(saved);

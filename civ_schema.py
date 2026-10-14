@@ -50,6 +50,16 @@ RETIRED_CIV_BONUSES = frozenset({333})
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _ut_effect(e: dict, own_tier: str) -> dict:
+    """One UT effect, always with its preset pool.  Either slot may draw from
+    either pool and the ids clash between them (castle 1 is not imperial 1), so
+    the pool is written out every time; a file from before the pools merged has
+    none, which means the slot's own — see civ_appender.UT_SLOT_TIER."""
+    tier = e.get("tier")
+    return {"id": int(e["id"]), "multiplier": int(e.get("multiplier", 1)),
+            "tier": tier if tier in ("castle", "imperial") else own_tier}
+
+
 def _clean(d: dict) -> dict:
     """Remove _doc / _doc_example / _section_* annotation keys."""
     return {k: v for k, v in d.items() if not k.startswith("_")}
@@ -108,7 +118,7 @@ def to_draft(schema: dict) -> dict:
         uu["elite_upgrade"] = elite_up
 
     # ── UTs ──────────────────────────────────────────────────────────────────
-    def _ut(raw: dict | None) -> dict:
+    def _ut(raw: dict | None, own_tier: str) -> dict:
         raw = _clean(raw or {})
         ut: dict = {
             "mode":            raw.get("mode", "vanilla"),
@@ -117,11 +127,10 @@ def to_draft(schema: dict) -> dict:
             "description":     raw.get("description", ""),
             "cost":            _cost_dict(raw.get("cost")),
             "time":            int(raw.get("time") or 0),
-            "effects": [
-                {"id": int(e["id"]), "multiplier": int(e.get("multiplier", 1))}
-                for e in (raw.get("effects") or [])
-                if isinstance(e, dict) and "id" in e
-            ],
+            "effects": [_ut_effect(e, own_tier) for e in (raw.get("effects") or [])
+                        if isinstance(e, dict) and "id" in e],
+            # Library cards in a Build Custom UT (#75).
+            "custom_bonuses": custom_bonus.normalize(raw.get("custom_bonuses")),
         }
         return ut
 
@@ -177,8 +186,9 @@ def to_draft(schema: dict) -> dict:
         "bonuses":      _bonus_list(s.get("bonuses")),
         "custom_bonuses": custom_bonus.normalize(s.get("custom_bonuses")),
         "team_bonuses": _bonus_list(s.get("team_bonuses")),
-        "castle_ut":    _ut(s.get("castle_ut")),
-        "imperial_ut":  _ut(s.get("imperial_ut")),
+        "custom_team_bonuses": custom_bonus.normalize(s.get("custom_team_bonuses")),
+        "castle_ut":    _ut(s.get("castle_ut"), "castle"),
+        "imperial_ut":  _ut(s.get("imperial_ut"), "imperial"),
         "tree":         tree,
         "long_range_ship":       s.get("long_range_ship"),
         "long_range_ship_elite": s.get("long_range_ship_elite", True),
@@ -208,7 +218,7 @@ def from_draft(draft: dict) -> dict:
     adv_flags = {k: v for k, v in (uu_raw.get("advanced_flags") or {}).items()
                  if k not in RETIRED_UU_FLAGS}
 
-    def _ut_out(ut_raw: dict | None) -> dict:
+    def _ut_out(ut_raw: dict | None, own_tier: str) -> dict:
         ut_raw = ut_raw or {}
         return {
             "mode":           ut_raw.get("mode",        "vanilla"),
@@ -217,11 +227,9 @@ def from_draft(draft: dict) -> dict:
             "description":    ut_raw.get("description", ""),
             "cost":           _cost_dict(ut_raw.get("cost")),
             "time":           int(ut_raw.get("time") or 0),
-            "effects": [
-                {"id": int(e["id"]), "multiplier": int(e.get("multiplier", 1))}
-                for e in (ut_raw.get("effects") or [])
-                if isinstance(e, dict) and "id" in e
-            ],
+            "effects": [_ut_effect(e, own_tier) for e in (ut_raw.get("effects") or [])
+                        if isinstance(e, dict) and "id" in e],
+            "custom_bonuses": custom_bonus.normalize(ut_raw.get("custom_bonuses")),
         }
 
     def _bonus_out(lst: list | None) -> list:
@@ -289,9 +297,10 @@ def from_draft(draft: dict) -> dict:
         "bonuses":      _bonus_out(draft.get("bonuses")),
         "custom_bonuses": custom_bonus.normalize(draft.get("custom_bonuses")),
         "team_bonuses": _bonus_out(draft.get("team_bonuses")),
+        "custom_team_bonuses": custom_bonus.normalize(draft.get("custom_team_bonuses")),
 
-        "castle_ut":    _ut_out(draft.get("castle_ut")),
-        "imperial_ut":  _ut_out(draft.get("imperial_ut")),
+        "castle_ut":    _ut_out(draft.get("castle_ut"), "castle"),
+        "imperial_ut":  _ut_out(draft.get("imperial_ut"), "imperial"),
 
         "tree": tree_out,
         "long_range_ship":         draft.get("long_range_ship"),

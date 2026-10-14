@@ -80,6 +80,8 @@ else
     run "monk voice gender"       "$PY" tests/test_monk_voice.py
     run "replaced civ leftovers"  "$PY" tests/test_replaced_civ_leftovers.py
     run "custom bonus targets"    "$PY" tests/test_custom_bonus_targets.py
+    run "multi-target, team & UT cards" "$PY" tests/test_custom_bonus_multi.py
+    run "UT preset pools"         "$PY" tests/test_ut_pools.py
     run "elite upgrade cost"      "$PY" tests/test_elite_upgrade_cost.py
     run "unit line targets"       "$PY" tests/test_unit_line_targets.py
     run "population limit bonus"  "$PY" tests/test_pop_cap_bonus.py

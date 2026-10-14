@@ -272,18 +272,22 @@
 <div class="wizard-panel d-none" id="panel-3">
 
   {# Custom bonuses — picked from the player's library (custom_bonuses.js) #}
-  <div class="card mb-3" id="custom-bonus-card">
-    <div class="card-header d-flex align-items-center gap-2">
+  {# A <details>: the header folds the section away; builder.js keeps the
+     count in the summary and remembers open/closed (_wireCardFolds). #}
+  <details class="card mb-3 cb-fold" id="custom-bonus-card" data-fold="civ" open>
+    <summary class="card-header d-flex align-items-center gap-2">
+      <i class="fa-solid fa-chevron-down cb-fold-chevron" aria-hidden="true"></i>
       <span class="step-badge">3</span> Custom Bonuses
+      <span class="cb-fold-count small" id="cb-pick-list-count"></span>
       <a href="{{ url_for('builder_custom_bonuses') }}" target="_blank" rel="noopener" class="ms-auto small">
         <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Manage your library
       </a>
-    </div>
+    </summary>
     <div class="card-body">
       <p class="text-muted small mb-3">Bonuses you made yourself. Tick the ones this civ should have — the library opens in a new tab, and changes show up here when you come back.</p>
-      <div id="cb-pick-list" class="cb-list"></div>
+      <div id="cb-pick-list" class="bonus-section cb-card-grid"></div>
     </div>
-  </div>
+  </details>
 
   {# Civ bonuses #}
   <div class="card mb-3">
@@ -315,6 +319,21 @@
 
 {# Step 4 — Team Bonus #}
 <div class="wizard-panel d-none" id="panel-4">
+  {# Library cards as team bonuses (#54) — custom_bonuses.js / CB_HOMES.team #}
+  <details class="card mb-3 cb-fold" data-fold="team" open>
+    <summary class="card-header d-flex align-items-center gap-2">
+      <i class="fa-solid fa-chevron-down cb-fold-chevron" aria-hidden="true"></i>
+      <span class="step-badge">4</span> Custom Team Bonuses
+      <span class="cb-fold-count small" id="cb-team-pick-list-count"></span>
+      <a href="{{ url_for('builder_custom_bonuses') }}" target="_blank" rel="noopener" class="ms-auto small">
+        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Manage your library
+      </a>
+    </summary>
+    <div class="card-body">
+      <p class="text-muted small mb-3">Bonuses from your library, applied to every player on your team. Bonuses for techs, the whole civilization or your own unique unit can't be shared with allies, so they're greyed out.</p>
+      <div id="cb-team-pick-list" class="bonus-section cb-card-grid"></div>
+    </div>
+  </details>
   <div class="card mb-3">
     <div class="card-header">
       <span class="step-badge">4</span>
@@ -338,6 +357,7 @@
       </div>
     </div>
   </div>
+
 </div>
 
 {# Step 4 — Unique Unit #}
@@ -671,62 +691,53 @@
     </div>
     <div class="card-body">
 
-      {# ── Mode toggle ── #}
-      <div class="btn-group w-100 mb-1" role="group" id="{{ prefix }}-mode-group">
-        <input type="radio" class="btn-check" name="{{ prefix }}-mode" id="{{ prefix }}-mode-vanilla" value="vanilla" autocomplete="off">
-        <label class="btn btn-outline-primary" for="{{ prefix }}-mode-vanilla">
-          <i class="fa-solid fa-scroll me-1"></i> Pick Vanilla Tech
-        </label>
-        <input type="radio" class="btn-check" name="{{ prefix }}-mode" id="{{ prefix }}-mode-custom" value="custom" autocomplete="off">
-        <label class="btn btn-outline-primary" for="{{ prefix }}-mode-custom">
-          <i class="fa-solid fa-flask me-1"></i> Build Custom
-        </label>
-      </div>
-      <div id="{{ prefix }}-mode-hint" class="text-muted small mb-3" style="font-size:.72rem;">
-        <span id="{{ prefix }}-mode-hint-vanilla"><i class="fa-solid fa-info-circle me-1"></i><strong>Pick Vanilla</strong>: selects an existing tech as your UT — its effect fires as-is. Name and description can be overridden below.</span>
-        <span id="{{ prefix }}-mode-hint-custom" style="display:none"><i class="fa-solid fa-info-circle me-1"></i><strong>Build Custom</strong>: compose a UT from bonus effects in the catalog. Any vanilla tech you already picked is still included — effects stack.</span>
-      </div>
+      {# Library cards in this UT (#75) — CB_HOMES.castle / .imperial #}
+      <details class="cb-fold cb-fold--inline mb-3" data-fold="{{ prefix }}" open>
+        <summary class="form-label fw-semibold d-flex align-items-center gap-2">
+          <i class="fa-solid fa-chevron-down cb-fold-chevron" aria-hidden="true"></i>
+          Your custom bonuses
+          <span class="cb-fold-count small fw-normal" id="{{ prefix }}-cb-pick-list-count"></span>
+          <a href="{{ url_for('builder_custom_bonuses') }}" target="_blank" rel="noopener" class="ms-auto small fw-normal">
+            <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Manage your library
+          </a>
+        </summary>
+        <p class="text-muted small mb-2">Tick bonuses from your library to add them to this tech; they take effect when it's researched, stacking with the techs you pick below. Techs and custom bonuses share the limit of 5.</p>
+        <div id="{{ prefix }}-cb-pick-list" class="bonus-section cb-card-grid"></div>
+      </details>
 
-      {# ── Vanilla section: searchable card grid ── #}
-      <div id="{{ prefix }}-vanilla-section">
+      {# One grid for both preset pools.  Click to add a tech to this UT, click
+         again to remove it; one pick is that tech as-is, more stack into one.
+         builder.js renderUTGrid / _utToggle. #}
+      <label class="form-label fw-semibold">Game technologies</label>
+      <p class="text-muted small mb-2">Pick one or more technologies. One pick is that tech as it is in the game; pick more and their effects stack into one tech. Techs from the other age are here too — they take effect when <em>this</em> tech is researched. Name, description and cost fill in from your first pick and stay editable.</p>
+      <div class="filter-nav sticky-nav">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <div class="btn-group btn-group-sm" role="group" aria-label="Which age's techs to show" id="{{ prefix }}-tier-filter">
+            <button type="button" class="btn btn-outline-secondary active" data-tier="all">All</button>
+            <button type="button" class="btn btn-outline-secondary" data-tier="castle">Castle Age techs</button>
+            <button type="button" class="btn btn-outline-secondary" data-tier="imperial">Imperial Age techs</button>
+          </div>
+          <span id="{{ prefix }}-count" class="small text-muted ms-auto"></span>
+        </div>
         <div id="{{ prefix }}-cat-pills" class="bonus-cat-pills mb-2"></div>
         <div class="input-group mb-3">
           <span class="input-group-text" style="background: oklch(from var(--body-bg) calc(l + 0.04) c h); border-color: oklch(from var(--body-bg) calc(l + 0.18) c h);">
             <i class="fa-solid fa-magnifying-glass text-muted"></i>
           </span>
           <input type="text" id="{{ prefix }}-vanilla-search" class="form-control"
-                 placeholder="Search technologies… e.g. infantry, cavalry, monk" autocomplete="off">
-        </div>
-        <div id="{{ prefix }}-vanilla-grid" class="bonus-grid ut-grid mb-3">
-          <div class="text-muted small fst-italic">Loading…</div>
-        </div>
-        <div id="{{ prefix }}-vanilla-hint" class="text-center py-2 text-muted small fst-italic">
-          <i class="fa-solid fa-hand-pointer me-1" style="color: var(--accent-2); opacity:.6;"></i>
-          Select a technology above — name, cost, and description will be auto-filled.
+                 placeholder="Search names and effects… e.g. cavalry, siege, monk" autocomplete="off">
         </div>
       </div>
+      <div id="{{ prefix }}-limit" class="text-danger small mb-2 d-none" role="alert"></div>
+      <div id="{{ prefix }}-vanilla-grid" class="bonus-grid ut-grid mb-3">
+        <div class="text-muted small fst-italic">Loading…</div>
+      </div>
 
-      {# ── Custom section: effects only (name moved to shared) ── #}
-      <div id="{{ prefix }}-custom-section" style="display:none"></div>
 
-      {# ── Shared: fields shown after tech selection or in custom mode ── #}
-      <div id="{{ prefix }}-shared-section" class="d-none">
+      <div id="{{ prefix }}-shared-section">
         <hr style="border-color: oklch(from var(--body-bg) calc(l + 0.12) c h); margin-bottom: 1rem;">
 
-        {# Vanilla mode: selected tech badge #}
-        <div id="{{ prefix }}-vanilla-selected" class="d-none mb-3">
-          <div class="d-flex align-items-center gap-2">
-            <i class="fa-solid fa-check-circle" style="color: var(--accent-2);"></i>
-            <span class="fw-semibold small">Selected: <span id="{{ prefix }}-vanilla-name" class="text-accent-2" style="color: var(--accent-2);"></span></span>
-            <span class="text-muted small ms-1" style="font-size:.72rem;">(click card again to deselect)</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" style="font-size:.7rem;padding:2px 8px;"
-                    id="{{ prefix }}-vanilla-change">
-              Change
-            </button>
-          </div>
-        </div>
-
-        {# Name — editable in both vanilla and custom modes #}
+        {# Name / description / cost — filled in from the first pick, always editable #}
         <div class="row g-3 mb-3">
           <div class="col-md-6">
             <label class="form-label fw-semibold" for="{{ prefix }}-name">
@@ -788,27 +799,6 @@
             </label>
             <input type="number" id="{{ prefix }}-time" class="form-control form-control-sm ut-cost-input"
                    min="0" max="9999" value="60" style="width:80px;">
-          </div>
-        </div>
-
-        {# Effects picker — custom mode only #}
-        <div id="{{ prefix }}-effects-section">
-          <label class="form-label fw-semibold">Tech Effects</label>
-          <p class="text-muted small mb-2">Add up to 5 effects applied when this tech is researched.</p>
-
-          <div class="bonus-search-wrap mb-3">
-            <div class="input-group">
-              <span class="input-group-text" style="background: oklch(from var(--body-bg) calc(l + 0.04) c h); border-color: oklch(from var(--body-bg) calc(l + 0.18) c h);">
-                <i class="fa-solid fa-magnifying-glass text-muted"></i>
-              </span>
-              <input type="text" id="{{ prefix }}-effect-search" class="form-control"
-                     placeholder="Search effects… e.g. infantry, cavalry, archer" autocomplete="off">
-            </div>
-            <div id="{{ prefix }}-effect-results" class="bonus-results d-none"></div>
-          </div>
-
-          <div id="{{ prefix }}-effect-slots" class="d-flex flex-column gap-2">
-            <div class="text-muted small fst-italic" id="{{ prefix }}-effect-empty">No effects added yet.</div>
           </div>
         </div>
 

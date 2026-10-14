@@ -21,9 +21,9 @@ import json
 from pathlib import Path
 
 import custom_bonus
-from build_all import _ut_bonus_id, _ut_name, ut_name_and_desc, ut_selection_text
+from build_all import _ut_source, _ut_name, ut_name_and_desc, ut_selection_text
 from build_civ import _tree_sets
-from civ_appender import get_civ_bonuses, get_team_bonuses
+from civ_appender import card_homes, get_civ_bonuses, get_team_bonuses, team_card_texts
 from civ_schema import norm_elite_upgrade, to_draft
 from wizard_build import _draft_to_civ_def
 
@@ -102,10 +102,9 @@ def _unit_block(entry: dict | None, uu: dict) -> dict | None:
 
 def _uts(schema: dict, civ_def: dict) -> list[dict]:
     out = []
-    for key, group, castle, label in (("castle_ut", 2, True, "Castle Age"),
-                                      ("imperial_ut", 3, False, "Imperial Age")):
+    for key, group, label in (("castle_ut", 2, "Castle Age"), ("imperial_ut", 3, "Imperial Age")):
         ut = schema.get(key) if isinstance(schema.get(key), dict) else {}
-        name = (ut.get("name") or "").strip() or _ut_name(_ut_bonus_id(civ_def, group), castle=castle) or ""
+        name = (ut.get("name") or "").strip() or _ut_name(*_ut_source(civ_def, group)) or ""
         name, desc = ut_name_and_desc(name, ut.get("description") or "")
         if name:
             out.append({"age": label, "name": name, "description": desc,
@@ -190,10 +189,11 @@ def summarize(schema: dict, uu_catalog: list[dict], techtree: dict) -> dict:
                       if isinstance(e, (list, tuple)) and e):
         if str(bid) in bonus_names:
             civ_bonuses.append(bonus_names[str(bid)] + (f" [x{mult}]" if int(mult) > 1 else ""))
-    for card in custom_bonus.normalize(schema.get("custom_bonuses")):
+    for card in card_homes(schema)["civ"]:
         civ_bonuses.append(custom_bonus.card_text(card))
     team = [team_names[str(e[0])] for e in get_team_bonuses(schema)
             if isinstance(e, (list, tuple)) and e and str(e[0]) in team_names]
+    team += team_card_texts(schema)
 
     uu = schema.get("unique_unit") or {}
     entry = next((e for e in uu_catalog if e.get("km_idx") == uu.get("km_idx")), None)

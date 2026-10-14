@@ -31,7 +31,7 @@ from bonus_names import bonus_name, skip_reason
 import custom_bonus
 from voice_source import voice_values
 from build_all import (_build_combined_data_zip, _build_combined_ui_zip,
-                       _ut_name, _ut_bonus_id, _BONUS_NAMES, _TEAM_BONUS_NAMES,
+                       _ut_name, _ut_source, _BONUS_NAMES, _TEAM_BONUS_NAMES,
                        _UNIQUE_CASTLE_STRINGS, _UNIQUE_IMP_STRINGS,
                        _kv_text, ut_name_and_desc, ut_selection_text, ut_research_label,
                        hero_string_lines)
@@ -52,7 +52,7 @@ from civ_appender import (apply_civ, assign_all_languages, button_layout_preview
                           DLL_CREATION_OFFSET, DLL_HELP_OFFSET, DLL_TECH_TREE_OFFSET,
                           _ARCH_REP_CIVS,
                           get_civ_bonuses, get_team_bonuses, get_km_uu_index,
-                          _KM_UU_NAMES)
+                          team_card_texts, card_homes, _KM_UU_NAMES)
 from dat_reader import find_game_dat, find_civtechtrees, load_civ_era_exclusions, load_dat
 from update_check import check_for_update
 from version import __version__
@@ -788,15 +788,13 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
 
             # Resolve UT names — wizard format supplies name directly; KM format
             # uses the bonus-table lookup which packs "Name (desc)" together.
-            castle_ut_bid  = _ut_bonus_id(civ_def, 2)
-            imp_ut_bid     = _ut_bonus_id(civ_def, 3)
             castle_ut_name = (
                 (civ_def.get("castle_ut") or {}).get("name")
-                or _ut_name(castle_ut_bid, castle=True)
+                or _ut_name(*_ut_source(civ_def, 2))
             )
             imp_ut_name = (
                 (civ_def.get("imperial_ut") or {}).get("name")
-                or _ut_name(imp_ut_bid, castle=False)
+                or _ut_name(*_ut_source(civ_def, 3))
             )
             # (name, description) the same way the other two routes do — see
             # build_all.ut_name_and_desc.  This is the THIRD copy of the Build
@@ -888,7 +886,7 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
                 suffix = f" [x{mult}]" if mult > 1 else ""
                 desc_parts.append(f"• {txt}{suffix} \\n")
             # Custom bonus cards — the other two routes list them; this one didn't.
-            for _card in custom_bonus.normalize(civ_def.get("custom_bonuses")):
+            for _card in card_homes(civ_def)["civ"]:
                 desc_parts.append(f"• {_kv_text(custom_bonus.card_text(_card))} \\n")
             desc_parts.append("\\n<b>Unique Unit:<b> \\n")
             uu_display = uu_override_name or (uu_info["name"] if uu_info else "Unique Unit")
@@ -896,15 +894,14 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
             desc_parts.append("\\n<b>Unique Techs:<b> \\n")
             desc_parts.append(f"• {ut_selection_text(castle_ut_name_short, castle_ut_desc_text)} \\n")
             desc_parts.append(f"• {ut_selection_text(imp_ut_name_short, imp_ut_desc_text)} \\n")
-            if team_bonus_entries:
+            _tb_texts = [_TEAM_BONUS_NAMES.get(str(e[0]), "")
+                         for e in team_bonus_entries if isinstance(e, list)]
+            # Library cards picked as team bonuses (#54).
+            _tb_texts = [t for t in _tb_texts if t] + [_kv_text(t) for t in team_card_texts(civ_def)]
+            if _tb_texts:
                 desc_parts.append("\\n<b>Team Bonus:<b> \\n")
-                for entry in team_bonus_entries:
-                    if not isinstance(entry, list):
-                        continue
-                    bid = str(entry[0])
-                    txt = _TEAM_BONUS_NAMES.get(bid, "")
-                    if txt:
-                        desc_parts.append(f"• {txt} \\n")
+                for txt in _tb_texts:
+                    desc_parts.append(f"• {txt} \\n")
             full_desc = "".join(desc_parts)
 
             for lang in LANGUAGES:
