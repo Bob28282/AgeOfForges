@@ -107,6 +107,21 @@ check("custom_bonuses survive a save/load round trip",
       rt.get("custom_bonuses") == norm, rt.get("custom_bonuses"))
 
 
+art = cb.normalize([{**cav, "art": {"type": "unit", "id": 38, "name": "Knight", "kind": "unit", "top": True}}])[0]
+check("a card image survives normalize as a list of target references (a lone object still reads)",
+      art.get("art") == [{"type": "unit", "id": 38, "name": "Knight", "kind": "unit"}], art.get("art"))
+check("a card image from another family (a tech on a unit card) is kept — it's only a picture",
+      cb.normalize([{**cav, "art": [{"type": "tech", "id": 101}]}])[0].get("art", [{}])[0].get("type") == "tech")
+two = cb.normalize([{**cav, "art": [{"type": "group", "id": "ships"}, {"type": "group", "id": "ships"},
+                                    {"type": "group", "id": "monks"}, {"type": "group", "id": "siege"}]}])[0]
+check("at most two card images, duplicates dropped",
+      [a["id"] for a in two["art"]] == ["ships", "monks"], two.get("art"))
+check("a junk or missing card image is dropped, not the card",
+      "art" not in cb.normalize([{**cav, "art": {"type": "group", "id": "dragons"}}])[0]
+      and "art" not in cb.normalize([{**cav, "art": "/etc/passwd"}])[0] and "art" not in norm[0])
+check("a card image never changes what the card builds",
+      cb.card_commands(art, no_line) == cb.card_commands(norm[0], no_line))
+
 check("the library id survives normalize; a junk id does not",
       cb.normalize([{**cav, "id": "abc123"}])[0].get("id") == "abc123"
       and "id" not in cb.normalize([{**cav, "id": "../../etc"}])[0])

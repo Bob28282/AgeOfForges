@@ -615,6 +615,22 @@ def _norm_card(raw) -> dict | None:
     card = {"targets": targets, "effects": effects, "text": str(raw.get("text") or "").strip()[:160]}
     if len(targets) == 1:
         card["target"] = targets[0]          # what Empire Forge before #76 reads
+    # Optional card image: one or two target references whose icons the card
+    # shows instead of its targets' — only art Empire Forge ships, never an
+    # upload.  Display only; the build never reads it.  Any family will do: it's
+    # just a picture.  A lone object (the first shape) still reads.
+    raw_art = raw.get("art")
+    art: list[dict] = []
+    for a in (raw_art if isinstance(raw_art, list) else [raw_art]):
+        n = _norm_target(a)
+        if n is None:
+            continue
+        n.pop("age", None)
+        n.pop("top", None)
+        if not any(same_target(n, x) for x in art):
+            art.append(n)
+    if art:
+        card["art"] = art[:2]
     # The library id.  A civ keeps it on its copy, which is how the wizard knows
     # which library card a civ's bonus came from.
     cid = raw.get("id")

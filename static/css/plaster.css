@@ -1967,7 +1967,18 @@ img.card-main-image {
 .cb-card-move .btn { font-size: .72rem; padding: .1rem .55rem; }
 .cb-card .btn-link { font-size: .72rem; padding: 0 .25rem; }
 .cb-card-actions { display: flex; justify-content: center; gap: .15rem; margin-top: .1rem; }
-.cb-card-actions .btn-link { font-size: .85rem; }
+/* Download / edit / delete: muted ink at rest, a parchment well on hover —
+   gold for the harmless two, crimson for delete (and its armed "Delete?"). */
+.cb-card-actions .btn-link {
+  font-size: .85rem; color: var(--ash); text-decoration: none;
+  border-radius: var(--r-sm); padding: .1rem .35rem;
+  transition: color .15s, background-color .15s;
+}
+.cb-card-actions .btn-link:hover { color: var(--ink-light); background: var(--gold-pale); }
+.cb-card-actions .btn-link:active { background: var(--parch-deep); }
+.cb-card-actions .btn-link:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; box-shadow: none; }
+.cb-card-actions .cb-remove:hover,
+.cb-card-actions .cb-remove[data-armed] { color: var(--crimson); background: color-mix(in srgb, var(--crimson) 12%, transparent); }
 /* Composer: the card being made, beside the line the game will show. */
 .cb-preview-wrap { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; }
 .cb-preview-card { flex: 0 0 190px; }
@@ -2052,6 +2063,20 @@ img.card-main-image {
   color: var(--ink-light); border-bottom: 1px solid var(--border-dark);
 }
 .cb-section:first-child { margin-top: 0; }
+/* Card image: the current choice (or Automatic) beside its buttons.  While
+   choosing, the picker wears gold rather than crimson, so it reads as a
+   different question from "Applies to". */
+.cb-art-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.cb-art-current { display: inline-flex; align-items: center; gap: .4rem; }
+.cb-art-current .cb-tile-art { width: 1.8rem; height: 1.8rem; font-size: .9rem; }
+.cb-editor--art .cb-picker { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.cb-editor--art .cb-tab.active { background: var(--gold); color: var(--walnut); }
+.cb-editor--art .cb-tile.selected { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); background: #fff6d6; }
+.cb-editor--art .cb-chosen-chip { border-color: var(--gold); }
+.cb-editor--art .cb-tile:not(:disabled) { cursor: url("../cursor-pick-image.svg") 1 1, copy; }
+/* Text links in the editor (Clear, Use automatic): ink, not Bootstrap blue. */
+.cb-editor .cb-link { color: var(--ink-light); text-decoration: underline dotted; text-underline-offset: 2px; font-weight: 500; }
+.cb-editor .cb-link:hover, .cb-editor .cb-link:focus-visible { color: var(--crimson); text-decoration-style: solid; }
 
 /* ── Homepage: "new feature" card (Custom Bonuses) ───────────────────────── */
 .builder-option-card--new {

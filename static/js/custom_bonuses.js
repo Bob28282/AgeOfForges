@@ -72,6 +72,13 @@ function cbTargets(card) {
   return card?.target ? [card.target] : [];
 }
 
+// A card's chosen images (up to two; [] = its targets' own), whichever shape.
+const CB_MAX_ART = 2;
+function cbArt(card) {
+  const a = card?.art;
+  return Array.isArray(a) ? a : a ? [a] : [];
+}
+
 function _cbTargetKind(t) {
   if (!t) return "unit";
   if (t.type === "group") return _cbGroup(t.id)?.kind || "unit";
@@ -202,7 +209,7 @@ function cbCardText(card) {
 // Content equality, ignoring the id — "has the library card changed since this
 // civ copied it?"
 function cbSameCard(a, b) {
-  const strip = c => JSON.stringify({ targets: cbTargets(c), effects: c.effects, text: c.text || "" });
+  const strip = c => JSON.stringify({ targets: cbTargets(c), effects: c.effects, text: c.text || "", art: cbArt(c) });
   return strip(a) === strip(b);
 }
 
@@ -215,7 +222,8 @@ function cbSameCard(a, b) {
 //                                footer "Cavalry"
 //   several effects, or text     stacked lines, one per effect (or per ";")
 // Art comes from the targets (the composer's own tiles): one icon, or the
-// first two side by side.  No multiplier: the player types the amount, and a
+// first two side by side — unless the card names its own image (`art`, a
+// target reference, so it's always art we ship).  No multiplier: the player types the amount, and a
 // multiplier on a MULTIPLY would compound (x3 on +20% is +72.8%, not +60%).
 // The category follows the vanilla cards' first-match order (naval, monk,
 // cost, economy, speed, combat, research, building) from the card's data.
@@ -337,7 +345,8 @@ function cbCardHtml(card, opts = {}) {
   const targets = cbTargets(card);
   const cat  = cbCardCategory(card);
   const only = targets.length === 1 ? targets[0] : null;
-  const art  = targets.slice(0, 2).map(t => _cbArtHtml(_cbTargetArt(t), _cbTargetLabel(t)));
+  const chosenArt = cbArt(card);
+  const art  = (chosenArt.length ? chosenArt : targets.slice(0, 2)).map(t => _cbArtHtml(_cbTargetArt(t), _cbTargetLabel(t)));
   const icons = art.length > 1 ? `<div class="card-icon-row">${art.join("")}</div>` : (art[0] || "");
   const civ = targets[0]?.type === "civ";
   const footer = civ ? "Civilization" : _cbJoin(targets.map(_cbSubject));
@@ -515,13 +524,24 @@ function _cbRenderPicker() {
   // that removes itself; Clear starts over (and is the way out of a family).
   const chosen = document.getElementById("cb-target-chosen");
   const targets = _cbWork.targets;
-  chosen.innerHTML = targets.length
-    ? targets.map((t, i) => `<span class="cb-chosen-chip"><i class="fa-solid fa-check me-1"></i>${cbEsc(_cbSubject(t))}`
-        + `<button type="button" class="cb-chosen-x" data-i="${i}" title="Remove" aria-label="Remove ${cbEsc(_cbSubject(t))}"><i class="fa-solid fa-xmark"></i></button></span>`).join("")
-      + (targets.length > 1 ? `<button type="button" class="btn btn-sm btn-link p-0 ms-1 cb-chosen-clear">Clear</button>` : "")
+  document.getElementById("cb-picker-title").textContent = _cbArtMode ? "Card image" : "Applies to";
+  const art = cbArt(_cbWork);
+  const chip = (t, i, name) => `<span class="cb-chosen-chip"><i class="fa-solid fa-${_cbArtMode ? "image" : "check"} me-1"></i>${cbEsc(name)}`
+    + `<button type="button" class="cb-chosen-x" data-i="${i}" title="Remove" aria-label="Remove ${cbEsc(name)}"><i class="fa-solid fa-xmark"></i></button></span>`;
+  if (_cbArtMode) {
+    chosen.innerHTML = (art.length ? art.map((t, i) => chip(t, i, _cbTargetLabel(t))).join("")
+                                   : `<span class="text-muted fw-normal">— click one or two icons below</span>`)
+      + `<button type="button" class="btn btn-sm btn-primary py-0 ms-1 cb-art-done"><i class="fa-solid fa-check me-1"></i>Done</button>`;
+    chosen.querySelector(".cb-art-done").addEventListener("click", () => _cbSetArtMode(false));
+  } else chosen.innerHTML = targets.length
+    ? targets.map((t, i) => chip(t, i, _cbSubject(t))).join("")
+      + (targets.length > 1 ? `<button type="button" class="btn btn-sm btn-link cb-link p-0 ms-1 cb-chosen-clear">Clear</button>` : "")
     : `<span class="text-muted fw-normal">— pick one or more below</span>`;
-  chosen.querySelectorAll(".cb-chosen-x").forEach(b => b.addEventListener("click", () =>
-    _cbToggleTarget(targets[parseInt(b.dataset.i, 10)])));
+  chosen.querySelectorAll(".cb-chosen-x").forEach(b => b.addEventListener("click", () => {
+    const i = parseInt(b.dataset.i, 10);
+    if (_cbArtMode) _cbToggleArt(art[i]);
+    else _cbToggleTarget(targets[i]);
+  }));
   chosen.querySelector(".cb-chosen-clear")?.addEventListener("click", () => {
     _cbWork.targets = [];
     _cbTargetsChanged();
@@ -557,15 +577,73 @@ function _cbRenderPicker() {
   grid.classList.toggle("cb-tiles--big", !searchable);
   grid.innerHTML = tiles.map((t, i) => {
     if (t.heading) return `<div class="cb-section">${cbEsc(t.heading)}</div>`;
-    const on = targets.some(x => _cbSameTarget(t.target, x));
+    // Picking an image, any tile will do — it's only the picture — up to two.
+    const on = (_cbArtMode ? art : targets).some(x => _cbSameTarget(t.target, x));
+    const full = _cbArtMode && !on && art.length >= CB_MAX_ART;
     // Civilization is one target on its own; anything else mixes within its family.
-    const off = !on && family && (family !== _cbFamily(t.target) || family === "civ");
-    const title = off ? `${t.label} — can't share a bonus with ${family === "civ" ? "the whole civilization" : family === "tech" ? "techs" : "units or buildings"}. Clear the choice first.` : t.label;
+    const off = full || (!_cbArtMode && !on && family && (family !== _cbFamily(t.target) || family === "civ"));
+    const title = full ? `${t.label} — a card shows two images at most. Remove one first.`
+                : off ? `${t.label} — can't share a bonus with ${family === "civ" ? "the whole civilization" : family === "tech" ? "techs" : "units or buildings"}. Clear the choice first.` : t.label;
     return `<button type="button" class="cb-tile${on ? " selected" : ""}${off ? " cb-tile--off" : ""}" data-i="${i}" aria-pressed="${on}"${off ? " disabled" : ""} title="${cbEsc(title)}">
       ${_cbIcon(t.icon, t.label)}<span class="cb-tile-label">${cbEsc(t.label)}</span></button>`;
   }).join("") || `<div class="text-muted small fst-italic p-2">Nothing matches that search.</div>`;
-  grid.querySelectorAll(".cb-tile").forEach(el => el.addEventListener("click", () =>
-    _cbToggleTarget(tiles[parseInt(el.dataset.i, 10)].target)));
+  grid.querySelectorAll(".cb-tile").forEach(el => el.addEventListener("click", () => {
+    const target = tiles[parseInt(el.dataset.i, 10)].target;
+    if (_cbArtMode) _cbToggleArt(target);
+    else _cbToggleTarget(target);
+  }));
+}
+
+// ── Card image (optional) ─────────────────────────────────────────────────────
+// The picker doubles as the image chooser: "Choose images" flips it into image
+// mode (gold, with its own cursor), clicks add or remove up to two, and Done
+// flips it back.  None chosen = the targets' own icons.
+
+let _cbArtMode = false;
+
+function _cbToggleArt(target) {
+  const { age, top, ...pic } = target;             // neither changes the picture
+  const art = cbArt(_cbWork);
+  const at = art.findIndex(x => _cbSameTarget(x, pic));
+  if (at >= 0) art.splice(at, 1);
+  else if (art.length < CB_MAX_ART) art.push(pic);
+  if (art.length) _cbWork.art = art; else delete _cbWork.art;
+  _cbRenderPicker();
+  _cbRenderArtRow();
+  _cbUpdatePreview();
+}
+
+function _cbSetArtMode(on) {
+  _cbArtMode = on;
+  const art = cbArt(_cbWork);
+  if (on && art.length) _cbTab = _cbTabOf(art);
+  else if (!on) _cbTab = _cbTabOf(_cbWork.targets);
+  _cbCategory = "";
+  document.getElementById("cb-search").value = "";
+  document.getElementById("cb-editor").classList.toggle("cb-editor--art", on);
+  _cbRenderPicker();
+  _cbShowHint();
+  _cbRenderArtRow();
+  _cbUpdatePreview();
+  if (on) document.getElementById("cb-target-label").scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function _cbRenderArtRow() {
+  const row = document.getElementById("cb-art-row");
+  const art = cbArt(_cbWork);
+  row.innerHTML = `<span class="fw-semibold">Card image</span>
+    <span class="cb-art-current">${art.length
+      ? art.map(a => `${_cbIcon(_cbTargetArt(a), _cbTargetLabel(a))}<span>${cbEsc(_cbTargetLabel(a))}</span>`).join("")
+      : `<span class="text-muted">Automatic — the targets' icons</span>`}</span>
+    ${_cbArtMode ? "" : `<button type="button" class="btn btn-sm btn-outline-secondary cb-art-choose">
+      <i class="fa-solid fa-image me-1"></i>${art.length ? "Change" : "Choose images"}</button>`}
+    ${art.length ? `<button type="button" class="btn btn-sm btn-link cb-link cb-art-auto">Use automatic</button>` : ""}`;
+  row.querySelector(".cb-art-choose")?.addEventListener("click", () => _cbSetArtMode(true));
+  row.querySelector(".cb-art-auto")?.addEventListener("click", () => {
+    delete _cbWork.art;
+    if (_cbArtMode) _cbSetArtMode(false);
+    else { _cbRenderArtRow(); _cbUpdatePreview(); }
+  });
 }
 
 function _cbTargetHint(t) {
@@ -647,6 +725,11 @@ function _cbTargetsChanged() {
 // some effects are missing.
 let _cbLastTarget = null;
 function _cbShowHint() {
+  if (_cbArtMode) {
+    document.getElementById("cb-target-hint").textContent =
+      "Pick one or two icons — any will do. They change only the picture on the card, not who the bonus applies to.";
+    return;
+  }
   const ts = _cbWork.targets;
   const t = ts.find(x => _cbSameTarget(x, _cbLastTarget || {})) || ts.at(-1);
   const many = ts.length > 1
@@ -777,6 +860,9 @@ async function cbOpenEditor(card, onSave) {
   _cbWork.targets = cbTargets(_cbWork);
   delete _cbWork.target;
   _cbLastTarget = null;
+  _cbArtMode = false;
+  document.getElementById("cb-editor").classList.remove("cb-editor--art");
+  _cbRenderArtRow();
   _cbTab = _cbTabOf(_cbWork.targets);
   _cbCategory = "";
   document.getElementById("cb-search").value = "";
@@ -835,6 +921,7 @@ async function _cbSave() {
     }),
     text: document.getElementById("cb-text").value.trim(),
   };
+  if (cbArt(_cbWork).length) card.art = cbArt(_cbWork);
   if (_cbWork.id) card.id = _cbWork.id;
   try {
     await _cbOnSave(card);
@@ -912,7 +999,7 @@ async function _cbLibraryPage() {
       actions: `<div class="cb-card-actions">
         <a class="btn btn-sm btn-link" href="/api/custom-bonuses/export?ids=${encodeURIComponent(c.id)}" title="Download to share" aria-label="Download to share"><i class="fa-solid fa-download"></i></a>
         <button type="button" class="btn btn-sm btn-link cb-edit" title="Edit" aria-label="Edit"><i class="fa-solid fa-pen"></i></button>
-        <button type="button" class="btn btn-sm btn-link text-danger cb-remove" title="Delete" aria-label="Delete"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" class="btn btn-sm btn-link cb-remove" title="Delete" aria-label="Delete"><i class="fa-solid fa-trash"></i></button>
       </div>`,
     })).join("");
     list.querySelectorAll(".cb-card[data-id]").forEach(row => {

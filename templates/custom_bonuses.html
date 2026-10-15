@@ -31,7 +31,7 @@
 
           <div id="cb-editor" class="cb-editor d-none">
             <div class="fw-semibold mb-2" id="cb-editor-title">New bonus</div>
-            <div class="small fw-semibold mb-1" id="cb-target-label">Applies to <span id="cb-target-chosen" class="cb-chosen"></span></div>
+            <div class="small fw-semibold mb-1" id="cb-target-label"><span id="cb-picker-title">Applies to</span> <span id="cb-target-chosen" class="cb-chosen"></span></div>
             <div class="cb-tabs mb-2" role="tablist" aria-labelledby="cb-target-label">
               <button type="button" class="cb-tab" role="tab" data-tab="group"><i class="fa-solid fa-users me-1"></i>Group</button>
               <button type="button" class="cb-tab" role="tab" data-tab="unit"><i class="fa-solid fa-chess-knight me-1"></i>Unit</button>
@@ -47,7 +47,8 @@
               </div>
               <div class="cb-tiles" id="cb-tiles"></div>
             </div>
-            <div class="form-text mt-0 mb-3" id="cb-target-hint"></div>
+            <div class="form-text mt-0 mb-2" id="cb-target-hint"></div>
+            <div class="cb-art-row small mb-3" id="cb-art-row"></div>
 
             <div class="small fw-semibold mb-1">Effects</div>
             <div id="cb-effects" class="cb-effects"></div>
@@ -89,6 +90,7 @@
             <li><strong>Targets and effects.</strong> A group (Cavalry, Archers, Buildings…), a unit line (Militia line, Knight line…) or one unit and the upgrades after it, one building, a villager job, techs — a single tech, an upgrade set, everything at one building, or the ages — or the whole civilization, for its population limit and one-time resources.</li>
             <li><strong>Several targets.</strong> Click more tiles to add them — Archers and Galleys, Knights and Varangian Guards. Units, buildings and villager jobs mix; techs mix only with techs. Only the effects every target can take are offered, and a unit two targets both cover (Cavalry and the Knight line) gets the bonus once.</li>
             <li><strong>Three places to use them.</strong> As a civ bonus, as a team bonus (step 4), or inside a <em>Build Custom</em> unique tech (steps 6–7), where it takes effect once researched. Tech, Civilization and Unique unit bonuses can't be team bonuses, and Civilization bonuses can't go in a unique tech.</li>
+            <li><strong>Card image.</strong> A card shows its targets' icons; <em>Choose images</em> swaps in one or two icons from the picker instead. It only changes the picture in Empire Forge — not what the bonus does or how it reads in game.</li>
             <li><strong>Groups match the game's own.</strong> "Cavalry" covers exactly what the game's cavalry bonuses do — including cavalry archers.</li>
             <li><strong>Civs keep a copy.</strong> Picking a bonus in the wizard copies it into the civ, so a civ file you share works for anyone. Editing or deleting a library bonus doesn't change civs that already use it; the wizard offers to update them.</li>
             <li><strong>Where they're saved:</strong> <code id="cb-path">your Empire Forge data folder</code>
