@@ -3557,7 +3557,23 @@ def _custom_bonus_resolver(dat: DatFile, civ_index: int, civ_def: dict,
     # building, and which unit is its UU.  Both keep alternate forms.
     present = _civ_present_units(civ_def, dat, civ_index) | {u for u in uu_ids if u >= 0}
 
+    # "Once a Mill is built": the marker tech the civ's own building fires when
+    # it completes (custom_bonus.TRIGGER_BUILDINGS).  Any building the tree
+    # holds that fires the same marker counts — a Folwark civ's Mill card.
+    def marker_of(uid: int):
+        u = units[uid] if 0 <= uid < n_units else None
+        t = u.building.tech_id if u is not None and u.building is not None else -1
+        return t if t >= 0 else None
+
+    tree_buildings = _tree_building_ids(civ_def)
+
     def resolve(kind: str, arg):
+        if kind == "trigger":
+            return marker_of(arg)
+        if kind == "has_building":
+            marker = marker_of(arg)
+            return not tree_buildings or any(marker is not None and marker_of(b) == marker
+                                             for b in tree_buildings)
         if kind == "class_of":
             u = units[arg] if 0 <= arg < n_units else None
             return u.class_ if u is not None else None
@@ -3640,29 +3656,42 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
     applied = 0
     for card in cards:
         text = custom_bonus.card_text(card)
-        cmds = custom_bonus.card_commands(card, line_of, resolve)
-        if not cmds:
+        steps = custom_bonus.card_steps(card, line_of, resolve)
+        if not steps:
             _msg = _empty_card_message("Custom bonus", card)
             print(f"  WARNING: {_msg}")
             warnings.append(_msg)
             continue
-        if custom_bonus.card_family(card) == "civ":
-            # Civilization cards build vanilla's own tech shapes (#65): an age
-            # gate, or start resources paid once a Town Center exists, the
-            # stockpile on a second tech after the first.  See civ_steps.
-            made: list[int] = []
-            for step in custom_bonus.civ_steps(card):
-                reqs = list(step["reqs"]) + ([made[step["after"]]] if step["after"] is not None else [])
-                made.append(_add_auto_fire_tech(dat, civ_index, step["cmds"], reqs=tuple(reqs),
-                                                name="C-Bonus, Custom"))
-            print(f"       Custom bonus: {text} ({len(cmds)} cmds, {len(made)} tech(s))")
-            applied += 1
+        if any(-1 in step["reqs"] for step in steps):
+            # The building has no "built" marker in this game version.
+            _msg = (f"Custom bonus \"{text}\" waits for a building this game version "
+                    "doesn't mark as built — skipped.")
+            print(f"  WARNING: {_msg}")
+            warnings.append(_msg)
             continue
-        for start in range(0, len(cmds), CHUNK):
-            _add_auto_fire_tech(dat, civ_index, cmds[start:start + CHUNK], name="C-Bonus, Custom")
-        parts = -(-len(cmds) // CHUNK)
-        print(f"       Custom bonus: {text} ({len(cmds)} cmds"
-              + (f", split across {parts} techs)" if parts > 1 else ")"))
+        bid = (card.get("when") or {}).get("building")
+        if bid is not None and not resolve("has_building", bid):
+            _msg = (f"Custom bonus \"{text}\" waits for a {card['when'].get('building_name', 'building')}, "
+                    "which this civ can't build — it will never take effect.")
+            print(f"  WARNING: {_msg}")
+            warnings.append(_msg)
+        # Each step is one tech with its gate (an age, a building's marker, a
+        # Town Center for start resources — see card_steps / civ_steps).  A step
+        # past the Effect cap splits, every part keeping the step's gate.
+        made: list[int] = []
+        n_techs = n_cmds = 0
+        for step in steps:
+            reqs = list(step["reqs"]) + ([made[step["after"]]] if step["after"] is not None else [])
+            cmds = step["cmds"]
+            first = None
+            for start in range(0, len(cmds), CHUNK):
+                tid = _add_auto_fire_tech(dat, civ_index, cmds[start:start + CHUNK], reqs=tuple(reqs),
+                                          name="C-Bonus, Custom")
+                first = tid if first is None else first
+                n_techs += 1
+            made.append(first)
+            n_cmds += len(cmds)
+        print(f"       Custom bonus: {text} ({n_cmds} cmds, {n_techs} tech{'s' if n_techs > 1 else ''})")
         applied += 1
     return applied
 

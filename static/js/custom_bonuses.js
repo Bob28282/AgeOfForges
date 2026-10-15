@@ -7,8 +7,11 @@
  * A card is one or more targets plus a list of effects, in exactly the shape
  * custom_bonus.py normalises:
  *   {id, targets: [{type:"group", id:"cavalry"} | {type:"unit", id, name, kind}, ...],
- *    effects: [{attr, op, value, resource?}], text}
+ *    effects: [{attr, op, value, resource?, steps?}], text, art?, when?}
  * Cards from before #76 have a single `target`; cbTargets() reads either.
+ * `when` (custom_bonus.STEP_AGES) makes a card wait: {age} from an age, {steps}
+ * grows each age (effects carry steps {"0"|"101"|"102"|"103": total}),
+ * {building, building_name} once the first one is built.
  *
  * Groups and attributes come from /api/builder/custom-bonus/catalog so the two
  * sides can't drift; cbCardText mirrors custom_bonus.card_text.
@@ -79,6 +82,43 @@ function cbArt(card) {
   return Array.isArray(a) ? a : a ? [a] : [];
 }
 
+// When a card takes effect (custom_bonus._norm_when).  A Civilization card
+// saved before gating kept its age on the target (#65); that still reads.
+function cbWhen(card) {
+  const w = { ...(card?.when || {}) };
+  const t = cbTargets(card)[0];
+  if (t?.type === "civ" && t.age && !w.age && !w.steps) w.age = t.age;
+  return w;
+}
+function _cbGated(card) { const w = cbWhen(card); return !!(w.age || w.steps || w.building); }
+
+// Ages a growing card steps on, in order; "0" is the start (Dark Age).
+const _CB_STEP_ORDER = ["0", "101", "102", "103"];
+function _cbAgeName(id) {
+  return (_cbCatalog?.step_ages || []).find(a => String(a.id) === String(id))?.label.replace(/ Age$/, "") || "";
+}
+// An effect's amounts: one per step on a growing card, else its value.
+function _cbVals(e) {
+  const s = e.steps || {};
+  const keys = _CB_STEP_ORDER.filter(a => s[a] != null && !isNaN(s[a]) && Number(s[a]) !== 0);
+  return keys.length ? keys.map(a => Number(s[a])) : [Number(e.value)];
+}
+function _cbStepsSuffix(e) {
+  const s = e.steps || {};
+  const ages = _CB_STEP_ORDER.filter(a => s[a] != null && !isNaN(s[a]) && Number(s[a]) !== 0);
+  if (!ages.length || (ages.length === 1 && ages[0] === "0")) return "";
+  if (ages.length === 1) return ` from the ${_cbAgeName(ages[0])} Age`;
+  return ` in the ${ages.map(_cbAgeName).join("/")} Age`;
+}
+// Mirrors custom_bonus.gate_text: " from the Castle Age", " once a Mill is built".
+function _cbGateText(card) {
+  const w = cbWhen(card);
+  const parts = [];
+  if (w.age && cbTargets(card)[0]?.type !== "civ") parts.push(`from the ${_cbAgeName(w.age)} Age`);
+  if (w.building_name) parts.push(`once ${/^[aeiou]/i.test(w.building_name) ? "an" : "a"} ${w.building_name} is built`);
+  return parts.length ? ` ${parts.join(", ")}` : "";
+}
+
 function _cbTargetKind(t) {
   if (!t) return "unit";
   if (t.type === "group") return _cbGroup(t.id)?.kind || "unit";
@@ -117,12 +157,14 @@ function cbTeamProblem(card) {
   if (fam === "civ") return "Civilization bonuses can't be team bonuses — they're built as one-off events for this civ.";
   if (ts.some(t => t.type === "group" && t.id === "unique_unit")) return "\"Unique unit\" means this civ's unique unit, which allies don't train.";
   if ((card.effects || []).some(e => e.attr === "pop_space")) return "Population space only works on this civ's own buildings.";
+  if (_cbGated(card)) return "Bonuses that wait for an age or a building can't be team bonuses — the game's own never do.";
   return "";
 }
 
 function cbUtProblem(card) {
   const ts = cbTargets(card);
   if (ts.length && _cbFamily(ts[0]) === "civ") return "Civilization bonuses can't go in a unique tech — they're tied to the start of the game or an age.";
+  if (_cbGated(card)) return "Bonuses that wait for an age or a building can't go in a unique tech — researching it is the trigger.";
   return "";
 }
 
@@ -139,26 +181,29 @@ function _cbSubject(t) {
 
 function _cbNum(v) { return Number.isInteger(v) ? String(v) : String(+v.toFixed(3)); }
 
+// Mirrors custom_bonus.effect_text, steps included ("+5/+10/+15 HP in the
+// Feudal/Castle/Imperial Age").
 function _cbEffectText(e, target) {
   const a = _cbAttr(e.attr);
   if (a?.novalue) return a.label;                      // "free and instant"
-  const v = Number(e.value);
-  if (!a || !v) return "";
-  if (e.attr === "tech_cost") {
+  const vals = _cbVals(e).filter(v => v && !isNaN(v));
+  if (!a || !vals.length) return "";
+  const v = vals.at(-1);                               // faster/slower follows where it ends up
+  const pct = e.op === "mul" || e.attr === "cost" ? "%" : "";
+  const signed = u => vals.map(x => `${x > 0 ? "+" : "-"}${_cbNum(Math.abs(x))}${u}`).join("/");
+  const bare   = u => vals.map(x => `${_cbNum(Math.abs(x))}${u}`).join("/");
+  let text;
+  if (_CB_COST.has(e.attr)) {
     const res = e.resource || "all";
-    return `${v > 0 ? "+" : "-"}${_cbNum(Math.abs(v))}${e.op === "mul" ? "%" : ""} ${res === "all" ? "cost" : res + " cost"}`;
+    text = `${signed(pct)} ${res === "all" ? "cost" : res + " cost"}`;
+  } else if (_CB_FASTER[e.attr]) {
+    text = `${_CB_FASTER[e.attr]} ${bare("%")} ${v > 0 ? "faster" : "slower"}`;
+  } else {
+    // A job names its work rate: "gather rate", "build speed", "repair speed".
+    const label = e.attr === "work_rate" && target?.type === "job" ? (_cbJob(target.id)?.work || a.label) : a.label;
+    text = `${signed(pct)} ${label}`;
   }
-  const sign = v > 0 ? "+" : "-";
-  const num  = _cbNum(Math.abs(v));
-  if (e.attr === "cost") {
-    const res = e.resource || "all";
-    return `${sign}${num}% ${res === "all" ? "cost" : res + " cost"}`;
-  }
-  if (_CB_FASTER[e.attr]) return `${_CB_FASTER[e.attr]} ${num}% ${v > 0 ? "faster" : "slower"}`;
-  // A job names its work rate: "gather rate", "build speed", "repair speed".
-  const label = e.attr === "work_rate" && target?.type === "job" ? (_cbJob(target.id)?.work || a.label) : a.label;
-  if (e.op === "mul") return `${sign}${num}% ${label}`;
-  return `${sign}${num} ${label}`;
+  return text + _cbStepsSuffix(e);
 }
 
 // Shortcodes in the player's own text ("[gold]") — the table is
@@ -184,12 +229,14 @@ function cbCardText(card) {
     // Mirrors custom_bonus._civ_effect_text: "+25 population limit in the
     // Imperial Age", "+100 stone at the start", "+200 wood on reaching the
     // Castle Age" (#65).
-    const age = (_cbCatalog?.civ_ages || []).find(a => a.id === targets[0].age);
+    const w = cbWhen(card);
+    const age = (_cbCatalog?.civ_ages || []).find(a => a.id === w.age);
     return (card.effects || []).filter(e => e.value != null && !isNaN(e.value) && e.value !== 0).map(e => {
       const num = `${e.value > 0 ? "+" : "-"}${_cbNum(Math.abs(e.value))}`;
       if (e.attr === "resources") {
         const what = e.resource === "each" ? "of each resource" : (e.resource || "gold");
-        return `${num} ${what} ${age ? `on reaching the ${age.label}` : "at the start"}`;
+        // With a building gate a grant isn't "at the start"; the gate text says when.
+        return `${num} ${what}${age ? ` on reaching the ${age.label}` : w.building ? "" : " at the start"}`;
       }
       if (e.attr === "convert_time") {
         const n = Math.abs(e.value);
@@ -197,19 +244,20 @@ function cbCardText(card) {
              + (age ? ` from the ${age.label}` : "");
       }
       return `${num} ${_cbAttr(e.attr)?.label || e.attr}` + (age ? ` in the ${age.label}` : "");
-    }).join(", ");
+    }).join(", ") + _cbGateText(card);
   }
   const subject = _cbJoin(targets.map(_cbSubject));
   // A job's own word for work rate ("gather rate") only when it's the only target.
   const named = targets.length === 1 ? targets[0] : null;
   const parts = (card.effects || []).map(e => _cbEffectText(e, named)).filter(Boolean);
-  return parts.length ? `${subject}: ${parts.join(", ")}` : subject;
+  return parts.length ? `${subject}: ${parts.join(", ")}${_cbGateText(card)}` : subject;
 }
 
 // Content equality, ignoring the id — "has the library card changed since this
 // civ copied it?"
 function cbSameCard(a, b) {
-  const strip = c => JSON.stringify({ targets: cbTargets(c), effects: c.effects, text: c.text || "", art: cbArt(c) });
+  const strip = c => JSON.stringify({ targets: cbTargets(c), effects: c.effects, text: c.text || "",
+                                      art: cbArt(c), when: cbWhen(c) });
   return strip(a) === strip(b);
 }
 
@@ -309,17 +357,30 @@ function _cbHeadline(e, target) {
              no_min_range: { heading: "None", stat: "minimum range" } }[e.attr]
         || { heading: a.label, stat: "" };
   }
-  const v = Number(e.value);
-  const sign = v > 0 ? "+" : "-";
-  const num = _cbNum(Math.abs(v));
-  if (_CB_FASTER[e.attr]) return { heading: `${num}%`, stat: `${_CB_FASTER[e.attr]} ${v > 0 ? "faster" : "slower"}` };
+  // A growing card's amounts side by side: "+5/+10/+15".
+  const vals = _cbVals(e);
+  const v = vals.at(-1);
+  const signed = u => vals.map(x => `${x > 0 ? "+" : "-"}${_cbNum(Math.abs(x))}${u}`).join("/");
+  if (_CB_FASTER[e.attr]) return { heading: vals.map(x => `${_cbNum(Math.abs(x))}%`).join("/"),
+                                   stat: `${_CB_FASTER[e.attr]} ${v > 0 ? "faster" : "slower"}` };
   if (_CB_COST.has(e.attr)) {
     const res = e.resource || "all";
     const pct = e.attr === "cost" || e.op === "mul" ? "%" : "";
-    return { heading: `${sign}${num}${pct}`, stat: res === "all" ? "cost" : `${res} cost` };
+    return { heading: signed(pct), stat: res === "all" ? "cost" : `${res} cost` };
   }
   const label = e.attr === "work_rate" && target?.type === "job" ? (_cbJob(target.id)?.work || a.label) : a.label;
-  return { heading: `${sign}${num}${e.op === "mul" ? "%" : ""}`, stat: label };
+  return { heading: signed(e.op === "mul" ? "%" : ""), stat: label };
+}
+
+// The card's "when" line: the age it waits for and/or the building — "" for a
+// card that applies from the start.  Steps show in the age table (one effect)
+// or in each effect's own line (several), so they never need it.
+function _cbWhenLine(card) {
+  const w = cbWhen(card);
+  const parts = [];
+  if (w.age) parts.push(`From ${_cbAgeName(w.age)} Age`);
+  if (w.building_name) parts.push(`Once ${/^[aeiou]/i.test(w.building_name) ? "an" : "a"} ${w.building_name} is built`);
+  return parts.join(" · ");
 }
 
 // The hover tooltip's text (tooltip.js): what the card does as the game will
@@ -353,19 +414,43 @@ function cbCardHtml(card, opts = {}) {
   const fx = card.effects || [];
 
   let middle;
-  if (!card.text && !civ && fx.length === 1) {
+  const valueCard = !card.text && !civ && fx.length === 1;
+  const stepAges = valueCard ? _CB_STEP_ORDER.filter(a => fx[0].steps?.[a] != null && Number(fx[0].steps[a]) !== 0) : [];
+  const progression = stepAges.length > 1 || (stepAges.length === 1 && stepAges[0] !== "0");
+  if (progression) {
+    // The vanilla wizard's progression card (builder.js): the stat, a lead
+    // line, then one age badge per step with that age's total.
+    const h = _cbHeadline({ ...fx[0], steps: undefined, value: 1 }, only);
+    const ROMAN = { 0: "I", 101: "II", 102: "III", 103: "IV" };
+    const pct = fx[0].op === "mul" || fx[0].attr === "cost" ? "%" : "";
+    const faster = _CB_FASTER[fx[0].attr];
+    const amt = v => faster ? `${_cbNum(Math.abs(v))}%` : `${v > 0 ? "+" : "-"}${_cbNum(Math.abs(v))}${pct}`;
+    middle = `<div class="card-heading">${cbEsc(h.stat)}</div>
+      <div class="card-prog-label">${cbEsc(`${footer}:`)}</div>
+      <div class="age-bonus-table">${stepAges.map(a => `
+        <div class="age">
+          <div class="bc-age-badge bc-age-${_cbAgeName(a).toLowerCase()}"><span class="bc-age-roman">${ROMAN[a]}</span></div>
+          <div class="bc-age-text">${cbEsc(amt(Number(fx[0].steps[a])))}</div>
+        </div>`).join("")}</div>`;
+  } else if (valueCard) {
     const h = _cbHeadline(fx[0], only);
     middle = `<div class="card-heading">${cbEsc(h.heading)}</div><div class="card-stat">${cbEsc(h.stat)}</div>`;
   } else {
     // Player text splits on ";" like the vanilla desc cards; generated text is
     // one line per effect (a Civilization card's own phrasing, comma-joined).
+    // The gate goes on the "when" line instead of trailing the last effect.
+    const gate = _cbGateText(card);
+    const plain = civ ? cbCardText(card) : "";
     const lines = card.text ? card.text.split(";")
-                : civ ? cbCardText(card).split(", ")
+                : civ ? (gate && plain.endsWith(gate) ? plain.slice(0, -gate.length) : plain).split(", ")
                 : fx.map(e => _cbEffectText(e, only));
     middle = `<ul class="card-desc-lines">${lines.map(l => l.trim()).filter(Boolean)
       .map(l => `<li class="desc-line">${_cbTokensHtml(cbEsc(l))}</li>`).join("")}</ul>`;
   }
+  const whenLine = _cbWhenLine(card);
+  if (whenLine) middle += `<div class="cb-card-when"><i class="fa-solid fa-hourglass-half me-1"></i>${cbEsc(whenLine)}</div>`;
   const cls = ["bonus-card", "cb-card", card.text || civ || fx.length !== 1 ? "desc-bonus" : "",
+               progression ? "progression-bonus" : "",
                opts.selected ? "selected" : "", opts.off ? "cb-card--off" : "", opts.extraClass || ""]
     .filter(Boolean).join(" ");
   const label = `${cat.charAt(0).toUpperCase()}${cat.slice(1)}`;
@@ -467,11 +552,8 @@ function _cbTilesFor(tab) {
   };
   if (tab === "group") return sectioned(c.groups.filter(g => g.tab === "group"));
   if (tab === "civ") {
-    // Keep the age already chosen when the tile is clicked again.
-    const cur = _cbWork?.targets?.[0];
-    const age = cur?.type === "civ" ? cur.age : undefined;
-    return [{ target: { type: "civ", id: "civ", ...(age ? { age } : {}) },
-              label: "Whole civilization", icon: "fa-landmark" }];
+    // Its age lives in the card's When (cbWhen), not on the target.
+    return [{ target: { type: "civ", id: "civ" }, label: "Whole civilization", icon: "fa-landmark" }];
   }
   if (tab === "villager") {
     const all  = c.groups.find(g => g.id === "villagers");
@@ -715,9 +797,12 @@ function _cbTargetsChanged() {
   // on a villager job) — the server enforces the same list.
   const ok = new Set(_cbAttrsForAll(_cbWork.targets).map(a => a.id));
   _cbWork.effects = _cbWork.effects.filter(e => ok.has(e.attr));
+  // Civilization cards don't grow each age (custom_bonus._norm_when).
+  if (_cbWork.targets[0]?.type === "civ" && _cbWork.when?.steps) _cbSetWhenMode("always");
   if (!_cbWork.effects.length && _cbWork.targets.length) _cbWork.effects.push(_cbNewEffect());
   _cbError("");
   _cbRenderPicker();
+  _cbRenderWhen();
   _cbRenderEffects();
 }
 
@@ -746,6 +831,7 @@ function _cbRenderEffects() {
   const kept = _cbWork.effects.map(e => e.attr)
     .filter(id => !offered.some(a => a.id === id)).map(_cbAttr).filter(Boolean);
   const attrs = [...offered, ...kept];
+  const stepped = !!_cbWork.when?.steps;
   wrap.innerHTML = _cbWork.effects.map((e, i) => {
     const a = _cbAttr(e.attr);
     const only = _cbWork.targets.length === 1 ? _cbWork.targets[0] : null;
@@ -757,10 +843,10 @@ function _cbRenderEffects() {
     }).join("");
     const unitLabel = op => op === "add" ? "flat" : (_CB_FASTER[e.attr] ? "% faster" : "%");
     if (a?.novalue) {
-      // Free / instant take no amount.
+      // Free / instant take no amount; on a growing card they come with the first step.
       return `<div class="cb-effect" data-idx="${i}">
         <select class="form-select form-select-sm cb-attr">${attrOpts}</select>
-        <span class="cb-op-fixed small text-muted">${e.attr === "free" ? "no cost, no wait" : "no wait"}</span>
+        <span class="cb-op-fixed small text-muted">${e.attr === "free" ? "no cost, no wait" : "no wait"}${stepped ? " — from the first step" : ""}</span>
         <button type="button" class="btn btn-sm btn-link text-danger cb-effect-remove" title="Remove effect"><i class="fa-solid fa-xmark"></i></button>
       </div>`;
     }
@@ -775,32 +861,25 @@ function _cbRenderEffects() {
       ? `<select class="form-select form-select-sm cb-res">${_cbCatalog.cost_resources.map(r =>
           `<option value="${r}"${r === (e.resource || "all") ? " selected" : ""}>${r === "all" ? "all resources" : r}</option>`).join("")}</select>`
       : "";
-    return `<div class="cb-effect" data-idx="${i}">
+    const numAttrs = a?.positive ? 'min="1" step="1"' : 'step="any"';
+    // A growing card: one box per age, each the TOTAL from that age on; a
+    // blank box keeps the amount before it (shown as its placeholder).
+    const amount = stepped
+      ? `<div class="cb-steps">${_CB_STEP_ORDER.map((age, k) => `
+          <label class="cb-step" title="${cbEsc(_cbAgeName(age))} Age — total from this age on">
+            <span class="bc-age-badge bc-age-${_cbAgeName(age).toLowerCase()}" aria-hidden="true"><span class="bc-age-roman">${["I", "II", "III", "IV"][k]}</span></span>
+            <input type="number" ${numAttrs} class="form-control form-control-sm cb-step-val" data-age="${age}"
+                   value="${e.steps?.[age] ?? ""}" aria-label="${cbEsc(_cbAgeName(age))} Age total">
+          </label>`).join("")}</div>`
+      : `<input type="number" ${numAttrs} class="form-control form-control-sm cb-value" value="${e.value ?? ""}" placeholder="e.g. ${a?.positive ? 10 : e.op === "add" ? 2 : 20}">`;
+    return `<div class="cb-effect${stepped ? " cb-effect--steps" : ""}" data-idx="${i}">
       <select class="form-select form-select-sm cb-attr">${attrOpts}</select>
-      <input type="number" ${a?.positive ? 'min="1" step="1"' : 'step="any"'} class="form-control form-control-sm cb-value" value="${e.value ?? ""}" placeholder="e.g. ${a?.positive ? 10 : e.op === "add" ? 2 : 20}">
+      ${amount}
       ${opCtl}
       ${resCtl}
       <button type="button" class="btn btn-sm btn-link text-danger cb-effect-remove" title="Remove effect"><i class="fa-solid fa-xmark"></i></button>
     </div>`;
   }).join("");
-
-  // A Civilization card can wait for an age (#65), like vanilla's
-  // "+10 population in Imperial Age".
-  const civT = _cbWork.targets[0]?.type === "civ" ? _cbWork.targets[0] : null;
-  if (civT) {
-    const ages = [{ id: "", label: "the start (Dark Age)" }, ...(_cbCatalog.civ_ages || [])];
-    wrap.insertAdjacentHTML("beforeend", `<div class="cb-age-row d-flex align-items-center gap-2 mt-1 small">
-      <span class="text-muted">From</span>
-      <select class="form-select form-select-sm cb-age" style="max-width:14rem">${ages.map(a =>
-        `<option value="${a.id}"${String(a.id) === String(civT.age || "") ? " selected" : ""}>${cbEsc(a.label)}</option>`).join("")}</select>
-    </div>`);
-    wrap.querySelector(".cb-age").addEventListener("change", ev => {
-      const v = parseInt(ev.target.value, 10);
-      if (isNaN(v)) delete civT.age; else civT.age = v;
-      _cbRenderPicker();
-      _cbUpdatePreview();
-    });
-  }
 
   wrap.querySelectorAll(".cb-effect").forEach(row => {
     const idx = parseInt(row.dataset.idx, 10);
@@ -819,6 +898,33 @@ function _cbRenderEffects() {
       e.value = isNaN(n) ? null : n;
       _cbUpdatePreview();
     });
+    row.querySelectorAll(".cb-step-val").forEach(input => {
+      // A blank box picks up the amount it carries over when focused, so the
+      // arrows step from 5 to 6, not from 0 to 1.  Left unchanged, it goes
+      // back to blank: a step that repeats the one before changes nothing.
+      input.addEventListener("focus", () => {
+        if (input.value === "" && input.placeholder !== "—") {
+          input.value = input.placeholder;
+          input.dataset.carried = input.placeholder;
+          input.select();
+        }
+      });
+      input.addEventListener("blur", () => {
+        if (input.dataset.carried != null && input.value === input.dataset.carried) input.value = "";
+        delete input.dataset.carried;
+      });
+      input.addEventListener("input", () => {
+        const n = parseFloat(input.value);
+        e.steps = e.steps || {};
+        // Same as the box carries over = no step of its own.
+        const same = input.dataset.carried != null && String(n) === input.dataset.carried;
+        if (isNaN(n) || n === 0 || same) delete e.steps[input.dataset.age]; else e.steps[input.dataset.age] = n;
+        e.value = _cbVals(e)[0] ?? null;
+        _cbStepPlaceholders(row, e);
+        _cbUpdatePreview();
+      });
+    });
+    if (stepped) _cbStepPlaceholders(row, e);
     row.querySelector(".cb-op")?.addEventListener("change", ev => { e.op = ev.target.value; _cbRenderEffects(); });
     row.querySelector(".cb-res")?.addEventListener("change", ev => { e.resource = ev.target.value; _cbUpdatePreview(); });
     row.querySelector(".cb-effect-remove").addEventListener("click", () => {
@@ -829,24 +935,144 @@ function _cbRenderEffects() {
   _cbUpdatePreview();
 }
 
+// A blank age box shows what it carries over: the last total before it, or
+// "—" before the first.
+function _cbStepPlaceholders(row, e) {
+  let carried = null;
+  row.querySelectorAll(".cb-step-val").forEach(input => {
+    const v = e.steps?.[input.dataset.age];
+    input.placeholder = carried == null ? "—" : _cbNum(carried);
+    if (v != null && v !== 0) carried = v;
+  });
+}
+
 function _cbNewEffect() {
   const used  = new Set(_cbWork.effects.map(e => e.attr));
   const attrs = _cbAttrsForAll(_cbWork.targets);
   const a = attrs.find(x => !used.has(x.id)) || attrs[0];
   return { attr: a.id, op: a.id === "hp" ? "mul" : a.ops[0], value: null,
+           ...(_cbWork.when?.steps && !a.novalue ? { steps: {} } : {}),
            ...(a.id === "resources" ? { resource: "gold" } : {}) };
 }
 
-function _cbUpdatePreview() {
+// ── When: always / from an age / grows each age, and an optional building ──
+// Sits above the effects because "grows each age" changes their amount boxes.
+
+function _cbRenderWhen() {
+  const box = document.getElementById("cb-when");
+  const w = _cbWork.when || (_cbWork.when = {});
+  const civ = _cbWork.targets[0]?.type === "civ";
+  const mode = w.steps ? "steps" : w.age ? "age" : "always";
+  const shields = ["ii", "iii", "iv"];
+  const modes = [
+    ["always", civ ? "From the start" : "Always", "fa-infinity", ""],
+    ["age", "From an age", "fa-hourglass-start", ""],
+    ["steps", "Grows each age", "fa-stairs",
+     civ ? "Civilization bonuses are one-time grants or limits — pick an age instead." : ""],
+  ];
+  box.innerHTML = `
+    <div class="cb-when-row">
+      <div class="cb-tabs cb-tabs--sm" role="radiogroup" aria-label="When">${modes.map(([id, label, icon, off]) =>
+        `<button type="button" class="cb-tab${mode === id ? " active" : ""}" role="radio" aria-checked="${mode === id}"
+                 data-mode="${id}"${off ? ` disabled title="${cbEsc(off)}"` : ""}><i class="fa-solid ${icon} me-1"></i>${label}</button>`).join("")}</div>
+      ${mode === "age" ? `<div class="cb-tabs cb-tabs--sm cb-when-ages" role="radiogroup" aria-label="Age">${(_cbCatalog.civ_ages || []).map((a, k) =>
+        `<button type="button" class="cb-tab${w.age === a.id ? " active" : ""}" role="radio" aria-checked="${w.age === a.id}" data-age="${a.id}">
+           <img src="/static/icon-shield-${shields[k]}.png" alt="">${cbEsc(a.label.replace(/ Age$/, ""))}</button>`).join("")}</div>` : ""}
+    </div>
+    <div class="cb-when-row mt-2">
+      <label class="small text-muted mb-0" for="cb-when-building"><i class="fa-solid fa-hammer me-1"></i>Wait until built</label>
+      <select id="cb-when-building" class="form-select form-select-sm cb-when-building">
+        <option value="">No building</option>${(_cbCatalog.triggers || []).map(b =>
+          `<option value="${b.id}"${String(w.building) === String(b.id) ? " selected" : ""}>${cbEsc(b.label)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="form-text mt-1">${cbEsc(_cbWhenHint(mode, w))}</div>`;
+  box.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => _cbSetWhenMode(b.dataset.mode)));
+  box.querySelectorAll("[data-age]").forEach(b => b.addEventListener("click", () => {
+    w.age = parseInt(b.dataset.age, 10);
+    _cbRenderWhen();
+    _cbUpdatePreview();
+  }));
+  box.querySelector(".cb-when-building").addEventListener("change", ev => {
+    const id = parseInt(ev.target.value, 10);
+    const b = (_cbCatalog.triggers || []).find(x => x.id === id);
+    if (b) { w.building = b.id; w.building_name = b.label; } else { delete w.building; delete w.building_name; }
+    _cbRenderWhen();
+    _cbUpdatePreview();
+  });
+}
+
+function _cbWhenHint(mode, w) {
+  const parts = [];
+  if (mode === "age") parts.push("Takes effect on reaching that age, the way the game's own age bonuses do.");
+  if (mode === "steps") parts.push("Type the total at each age — e.g. 5, 10, 15 for +5/+10/+15. "
+    + "A blank age keeps the amount before it. Percentages are worked out so the final age's total is exact.");
+  if (w.building) parts.push("Takes effect when the first one is finished — once; losing it doesn't take the bonus back.");
+  if (mode !== "always" || w.building) parts.push("Can't be a team bonus or go in a unique tech.");
+  return parts.join(" ");
+}
+
+// Switching keeps what the player typed: a single amount becomes the start
+// step, and a growing card's first step becomes the single amount.
+function _cbSetWhenMode(mode) {
+  const w = _cbWork.when || (_cbWork.when = {});
+  const was = w.steps ? "steps" : w.age ? "age" : "always";
+  if (mode === was) return;
+  delete w.age;
+  delete w.steps;
+  if (mode === "age") w.age = 102;                       // Castle: the usual ask
+  if (mode === "steps") {
+    w.steps = true;
+    for (const e of _cbWork.effects) {
+      if (_cbAttr(e.attr)?.novalue) continue;
+      e.steps = e.value != null && !isNaN(e.value) && e.value !== 0 ? { "0": e.value } : {};
+    }
+  } else if (was === "steps") {
+    for (const e of _cbWork.effects) {
+      e.value = _cbVals(e)[0] ?? null;
+      delete e.steps;
+    }
+  }
+  _cbRenderWhen();
+  _cbRenderEffects();
+}
+
+// An effect worth keeping: free/instant, or a non-zero amount (any age's, on a
+// growing card).
+function _cbHasAmount(e) {
+  if (_cbAttr(e.attr)?.novalue) return true;
+  return _cbVals(e).some(v => v != null && !isNaN(v) && v !== 0);
+}
+
+// Card text starts as the generated text, in the field itself so it can be
+// tweaked, and follows the card until the player edits it.  Untouched, it
+// saves as "" — the card stays generated (a value card, and it keeps up if the
+// bonus is edited later).
+let _cbTextAuto = true;
+
+function _cbSyncText() {
   const textEl = document.getElementById("cb-text");
-  const work = { ..._cbWork, text: textEl.value.trim() };
+  const generated = _cbWork.targets.length ? cbCardText({ ..._cbWork, text: "" }) : "";
+  if (_cbTextAuto) textEl.value = generated.slice(0, 160);
+  textEl.placeholder = generated;
+  document.getElementById("cb-text-state").textContent =
+    _cbTextAuto ? "(generated — edit it if you like)" : "(your own)";
+  document.getElementById("cb-text-reset").classList.toggle("d-none", _cbTextAuto);
+}
+
+function _cbPlayerText() {
+  return _cbTextAuto ? "" : document.getElementById("cb-text").value.trim();
+}
+
+function _cbUpdatePreview() {
+  _cbSyncText();
+  const work = { ..._cbWork, text: _cbPlayerText() };
   const out = cbCardText(work);
   document.getElementById("cb-preview-text").textContent = _cbWork.targets.length ? `• ${out}` : "—";
-  textEl.placeholder = cbCardText({ ..._cbWork, text: "" });
   // The card as the wizard will show it — only the effects with an amount.
   const card = document.getElementById("cb-preview-card");
   if (card) {
-    const effects = work.effects.filter(e => _cbAttr(e.attr)?.novalue || (e.value != null && !isNaN(e.value) && e.value !== 0));
+    const effects = work.effects.filter(_cbHasAmount);
     card.innerHTML = _cbWork.targets.length && effects.length
       ? cbCardHtml({ ...work, effects })
       : `<div class="text-muted small fst-italic">Pick a target and an amount to see the card.</div>`;
@@ -859,6 +1085,12 @@ async function cbOpenEditor(card, onSave) {
   _cbWork = card ? JSON.parse(JSON.stringify(card)) : { effects: [], text: "" };
   _cbWork.targets = cbTargets(_cbWork);
   delete _cbWork.target;
+  // The age lives in When; a Civilization card from before kept it on the target.
+  _cbWork.when = cbWhen(_cbWork);
+  _cbWork.targets.forEach(t => { if (t.type === "civ") delete t.age; });
+  if (_cbWork.when.steps) {
+    _cbWork.effects.forEach(e => { if (!_cbAttr(e.attr)?.novalue && !e.steps) e.steps = { "0": e.value }; });
+  }
   _cbLastTarget = null;
   _cbArtMode = false;
   document.getElementById("cb-editor").classList.remove("cb-editor--art");
@@ -868,6 +1100,7 @@ async function cbOpenEditor(card, onSave) {
   document.getElementById("cb-search").value = "";
   _cbRenderPicker();
   _cbShowHint();
+  _cbTextAuto = !_cbWork.text;
   document.getElementById("cb-text").value = _cbWork.text || "";
   const chips = document.getElementById("cb-tokens");
   if (chips) chips.innerHTML = Object.entries(_cbCatalog.tokens || {}).map(([tok, t]) =>
@@ -876,6 +1109,7 @@ async function cbOpenEditor(card, onSave) {
   document.getElementById("cb-error").classList.add("d-none");
   document.getElementById("cb-editor-title").textContent = card ? "Edit bonus" : "New bonus";
   if (!_cbWork.effects.length && _cbWork.targets.length) _cbWork.effects.push(_cbNewEffect());
+  _cbRenderWhen();
   _cbRenderEffects();
   document.getElementById("cb-editor").classList.remove("d-none");
   document.getElementById("cb-new")?.classList.add("d-none");
@@ -896,14 +1130,16 @@ function _cbError(msg) {
 
 async function _cbSave() {
   if (!_cbWork.targets.length) return _cbError("Choose who this bonus applies to.");
-  const effects = _cbWork.effects.filter(e =>
-    _cbAttr(e.attr)?.novalue || (e.value !== null && e.value !== undefined && e.value !== 0 && !isNaN(e.value)));
+  const w = _cbWork.when || {};
+  const effects = _cbWork.effects.filter(_cbHasAmount);
   if (!effects.length) return _cbError("Add at least one effect with a non-zero amount.");
-  const tooLow = effects.find(e => e.op === "mul" && e.value <= -100);
+  // Every age's amount is checked, not just the first.
+  const amounts = e => _cbAttr(e.attr)?.novalue ? [] : _cbVals(e).filter(v => !isNaN(v) && v !== 0);
+  const tooLow = effects.find(e => e.op === "mul" && amounts(e).some(v => v <= -100));
   if (tooLow) return _cbError(`${_cbAttr(tooLow.attr).label} can't go down by 100% or more.`);
   // The server drops these silently; say why instead.  A lower population
   // limit was tested in game and ignored (2026-10-11).
-  const negative = effects.find(e => _cbAttr(e.attr)?.positive && e.value < 0);
+  const negative = effects.find(e => _cbAttr(e.attr)?.positive && amounts(e).some(v => v < 0));
   if (negative) {
     const label = _cbAttr(negative.attr).label;
     return _cbError(`${label.charAt(0).toUpperCase() + label.slice(1)} can only be raised` +
@@ -914,13 +1150,26 @@ async function _cbSave() {
     effects: effects.map(e => {
       if (_cbAttr(e.attr)?.novalue) return { attr: e.attr, op: "set" };
       const out = { attr: e.attr, op: e.op, value: e.value };
+      if (w.steps) {
+        // A step that repeats the one before changes nothing (the server drops it too).
+        let prev = null;
+        out.steps = Object.fromEntries(_CB_STEP_ORDER.filter(a => e.steps?.[a] != null && e.steps[a] !== 0)
+          .filter(a => { const keep = e.steps[a] !== prev; prev = e.steps[a]; return keep; })
+          .map(a => [a, e.steps[a]]));
+        out.value = _cbVals(out)[0];
+      }
       if (_CB_COST.has(e.attr)) out.resource = e.resource || "all";
       // Without this every one-time resources card saved as gold.
       if (e.attr === "resources") out.resource = e.resource || "gold";
       return out;
     }),
-    text: document.getElementById("cb-text").value.trim(),
+    text: _cbPlayerText(),
   };
+  const when = {
+    ...(w.steps ? { steps: true } : w.age ? { age: w.age } : {}),
+    ...(w.building ? { building: w.building, building_name: w.building_name } : {}),
+  };
+  if (Object.keys(when).length) card.when = when;
   if (cbArt(_cbWork).length) card.art = cbArt(_cbWork);
   if (_cbWork.id) card.id = _cbWork.id;
   try {
@@ -938,7 +1187,20 @@ function cbWireEditor() {
     _cbWork.effects.push(_cbNewEffect());
     _cbRenderEffects();
   });
-  document.getElementById("cb-text").addEventListener("input", _cbUpdatePreview);
+  // Typing makes the text the player's own.  Clearing the field (or typing the
+  // generated text back) returns it to generated — on leaving the field, so it
+  // doesn't refill under the cursor mid-edit.
+  const textEl = document.getElementById("cb-text");
+  textEl.addEventListener("input", () => { _cbTextAuto = false; _cbUpdatePreview(); });
+  textEl.addEventListener("blur", () => {
+    if (!_cbWork) return;
+    const v = textEl.value.trim();
+    if (!v || v === cbCardText({ ..._cbWork, text: "" })) { _cbTextAuto = true; _cbUpdatePreview(); }
+  });
+  document.getElementById("cb-text-reset").addEventListener("click", () => {
+    _cbTextAuto = true;
+    _cbUpdatePreview();
+  });
   // Shortcode chips: insert "[gold]" at the cursor.
   document.getElementById("cb-tokens")?.addEventListener("click", ev => {
     const chip = ev.target.closest("[data-token]");
@@ -949,6 +1211,7 @@ function cbWireEditor() {
     input.value = (input.value.slice(0, at) + code + input.value.slice(input.selectionEnd ?? at)).slice(0, 160);
     input.focus();
     input.setSelectionRange(at + code.length, at + code.length);
+    _cbTextAuto = false;
     _cbUpdatePreview();
   });
   document.querySelectorAll(".cb-tab").forEach(b => b.addEventListener("click", () => {

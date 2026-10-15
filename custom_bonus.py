@@ -297,6 +297,49 @@ _TC_SPAWN, _TC_EXISTS = 639, 307       # "Town Center Spawn", "Shadow TC Annex" 
 CIV_AGES = {101: "Feudal", 102: "Castle", 103: "Imperial"}
 _POP_CAP_RESOURCE = 32
 
+# ── When a card takes effect ─────────────────────────────────────────────────
+# card["when"], optional — absent = from the start, as every card before it:
+#   {"age": 102}                     from the Castle Age
+#   {"steps": True}                  grows each age: every effect carries
+#                                    "steps" {"0"|"101"|"102"|"103": TOTAL}
+#   {"building": 68, "building_name": "Mill"}   once the first Mill is built
+# A building combines with either.  Each step is one civ-owned auto-fire tech
+# whose prerequisites are the age and/or the building's marker, which is how
+# vanilla writes them: Vietnamese "+2% arc HP feudal/castle/imp" (642-644) and
+# Malians "inf +1 armor feudal/castle/imp" (591-593) are one tech per age, each
+# adding THAT age's increment.  The player types totals; card_steps works out
+# the increments (a ratio for percentages, which compound).
+STEP_AGES = (0, 101, 102, 103)          # 0 = the start (Dark Age)
+AGE_NAMES = {0: "Dark", **CIV_AGES}
+
+# "Once a X is built": a building's "initiates tech" (unit.building.tech_id)
+# fires a marker tech when the first one completes — the age-ups wait on these.
+# All are civ -1 with no prerequisites (checked against the DAT 2026-10-15).
+# The marker shown is vanilla's; the build reads the civ's own unit, so a
+# building whose marker moved still works.  Curated, not swept: the Watch
+# Tower's slot holds its make-available tech, and a Town Center's fires for
+# the starting one.  Houses, towers, walls and the Wonder have none.
+TRIGGER_BUILDINGS: dict[int, tuple[str, int]] = {
+    68:   ("Mill", 110),            # Folwark too: same marker
+    562:  ("Lumber Camp", 258),
+    584:  ("Mining Camp", 282),
+    50:   ("Farm", 109),            # Fish Trap and Pasture too: same marker
+    12:   ("Barracks", 122),
+    87:   ("Archery Range", 132),
+    101:  ("Stable", 130),
+    49:   ("Siege Workshop", 138),
+    103:  ("Blacksmith", 106),
+    84:   ("Market", 128),
+    104:  ("Monastery", 107),
+    45:   ("Dock", 108),
+    209:  ("University", 146),
+    82:   ("Castle", 266),
+    1251: ("Krepost", 292),
+    1665: ("Donjon", 291),
+    2556: ("Settlement", 1357),
+    1808: ("Mule Cart", 933),
+}
+
 COST_RESOURCES = ("all", *_RES_COST)
 
 # Alternate forms of one unit that no EC_UPGRADE connects — packing, stance
@@ -564,6 +607,9 @@ def catalog() -> dict:
                    for k, a in ATTRS.items()],
         "cost_resources": list(COST_RESOURCES),
         "civ_ages": [{"id": k, "label": f"{v} Age"} for k, v in CIV_AGES.items()],
+        "step_ages": [{"id": k, "label": f"{AGE_NAMES[k]} Age"} for k in STEP_AGES],
+        "triggers": [{"id": k, "label": label} for k, (label, _) in
+                     sorted(TRIGGER_BUILDINGS.items(), key=lambda kv: kv[1][0])],
         "civ_resources": list(CIV_RESOURCES),
         "tokens": {k: {"word": w, "icon": f"/static/icons/{icon}"} for k, (w, icon) in TEXT_TOKENS.items()},
     }
@@ -605,14 +651,26 @@ def _norm_card(raw) -> dict | None:
     # be able to put HP on a villager job.  With several targets, an effect must
     # suit every one of them.
     kinds = {target_kind(t) for t in targets}
-    effects = [e for e in (_norm_effect(x) for x in (raw.get("effects") or []))
+    when = _norm_when(raw.get("when"), family, targets[0])
+    norm_eff = _norm_stepped_effect if when.get("steps") else _norm_effect
+    effects = [e for e in (norm_eff(x) for x in (raw.get("effects") or []))
                if e and kinds <= set(ATTRS[e["attr"]]["kinds"])]
-    if family == "civ" and targets[0].get("age"):
+    if when.get("steps") and not any("steps" in e for e in effects):
+        when.pop("steps")                   # nothing left that grows
+    if family == "civ" and (when.get("age") or when.get("building")):
         # Taking resources away on age-up has no vanilla precedent.
         effects = [e for e in effects if not (e["attr"] == "resources" and e["value"] < 0)]
     if not effects:
         return None
     card = {"targets": targets, "effects": effects, "text": str(raw.get("text") or "").strip()[:160]}
+    if when:
+        card["when"] = when
+    if family == "civ":
+        # The age's home is `when`; the target keeps a copy because Empire
+        # Forge before card gating reads it there (#65).
+        targets[0].pop("age", None)
+        if when.get("age"):
+            targets[0]["age"] = when["age"]
     if len(targets) == 1:
         card["target"] = targets[0]          # what Empire Forge before #76 reads
     # Optional card image: one or two target references whose icons the card
@@ -752,6 +810,69 @@ def _norm_effect(raw) -> dict | None:
     return out
 
 
+def _norm_when(raw, family: str, first_target: dict) -> dict:
+    """A card's `when` (see STEP_AGES), cleaned; {} = from the start.
+
+    A Civilization card saved before gating kept its age on the target (#65),
+    which still reads.  Civilization cards don't grow each age: their one-time
+    grants have no running total to step."""
+    raw = raw if isinstance(raw, dict) else {}
+    when: dict = {}
+    if raw.get("steps") and family != "civ":
+        when["steps"] = True
+    else:
+        age = raw.get("age", first_target.get("age") if family == "civ" else None)
+        try:
+            age = int(age)
+        except (TypeError, ValueError):
+            age = None
+        if age in CIV_AGES:
+            when["age"] = age
+    try:
+        bid = int(raw.get("building"))
+    except (TypeError, ValueError):
+        bid = None
+    if bid in TRIGGER_BUILDINGS:
+        when["building"] = bid
+        when["building_name"] = TRIGGER_BUILDINGS[bid][0]
+    return when
+
+
+def _norm_stepped_effect(raw) -> dict | None:
+    """An effect on a card that grows each age: `steps` maps an age (STEP_AGES,
+    as a string — JSON keys) to the TOTAL from that age on.  Each total is
+    checked as a plain effect would be, so a step can't do what the effect
+    can't; a bad or zero step is dropped, not the effect.  `value` is the first
+    step — what Empire Forge before gating applies, from the start, so an old
+    reader under-delivers rather than over-delivers.  An effect with no amount
+    (free, instant) takes effect at the card's first step instead."""
+    if not isinstance(raw, dict):
+        return None
+    spec = ATTRS.get(raw.get("attr"))
+    if spec is None:
+        return None
+    if spec.get("novalue"):
+        return _norm_effect(raw)
+    raw_steps = raw.get("steps")
+    if not isinstance(raw_steps, dict):
+        raw_steps = {"0": raw.get("value")}          # a plain effect: from the start
+    steps: dict[str, float] = {}
+    base = None
+    for age in STEP_AGES:
+        if str(age) not in raw_steps:
+            continue
+        e = _norm_effect({**raw, "value": raw_steps[str(age)]})
+        if e is None:
+            continue
+        if steps and list(steps.values())[-1] == e["value"]:
+            continue                        # repeats the step before: changes nothing
+        base = base or e
+        steps[str(age)] = e["value"]
+    if base is None:
+        return None
+    return {**base, "value": next(iter(steps.values())), "steps": steps}
+
+
 # ── Card text ─────────────────────────────────────────────────────────────────
 
 def _fmt_num(v) -> str:
@@ -784,46 +905,76 @@ def target_label(target: dict) -> str:
 
 
 def effect_text(eff: dict, target: dict | None = None) -> str:
+    """'+20% HP', 'attack 25% faster' — or, growing each age, the game's own
+    '+5/+10/+15 HP in the Feudal/Castle/Imperial Age'."""
     spec  = ATTRS[eff["attr"]]
     if spec.get("novalue"):
         return spec["label"]
-    if eff["attr"] == "tech_cost":
-        v = float(eff["value"])
+    steps = eff.get("steps") or {}
+    vals  = [float(v) for v in steps.values()] or [float(eff["value"])]
+    v     = vals[-1]                       # faster/slower follows where it ends up
+    pct   = "%" if eff["op"] == "mul" or eff["attr"] == "cost" else ""
+
+    def signed(unit: str = "") -> str:
+        return "/".join(f"{'+' if x > 0 else '-'}{_fmt_num(abs(x))}{unit}" for x in vals)
+
+    def bare(unit: str = "") -> str:
+        return "/".join(f"{_fmt_num(abs(x))}{unit}" for x in vals)
+
+    if eff["attr"] in ("tech_cost", "cost"):
         res = eff.get("resource", "all")
-        what = "cost" if res == "all" else f"{res} cost"
-        unit = "%" if eff["op"] == "mul" else ""
-        return f"{'+' if v > 0 else '-'}{_fmt_num(abs(v))}{unit} {what}"
-    if eff["attr"] == "research_speed":
-        v = float(eff["value"])
-        return f"research {_fmt_num(abs(v))}% {'faster' if v > 0 else 'slower'}"
-    v     = float(eff["value"])
-    sign  = "+" if v > 0 else "-"
-    num   = _fmt_num(abs(v))
-    if eff["attr"] == "cost":
-        res = eff.get("resource", "all")
-        what = "cost" if res == "all" else f"{res} cost"
-        return f"{sign}{num}% {what}"
-    if spec.get("faster"):
+        text = f"{signed(pct)} {'cost' if res == 'all' else f'{res} cost'}"
+    elif eff["attr"] == "research_speed":
+        text = f"research {bare('%')} {'faster' if v > 0 else 'slower'}"
+    elif spec.get("faster"):
         verb = {"attack_speed": "attack", "train_speed": "train", "build_speed": "build"}[eff["attr"]]
-        return f"{verb} {num}% {'faster' if v > 0 else 'slower'}"
-    label = spec["label"]
-    if eff["attr"] == "work_rate" and target and target["type"] == "job":
-        label = JOBS[target["id"]]["work"]          # "gather rate", "build speed"
-    if eff["op"] == "mul":
-        return f"{sign}{num}% {label}"
-    return f"{sign}{num} {label}"
+        text = f"{verb} {bare('%')} {'faster' if v > 0 else 'slower'}"
+    else:
+        label = spec["label"]
+        if eff["attr"] == "work_rate" and target and target["type"] == "job":
+            label = JOBS[target["id"]]["work"]          # "gather rate", "build speed"
+        text = f"{signed(pct)} {label}"
+    return text + _steps_suffix(steps)
 
 
-def _civ_effect_text(eff: dict, age) -> str:
+def _steps_suffix(steps: dict) -> str:
+    """' in the Feudal/Castle/Imperial Age'; one step from an age reads
+    ' from the Castle Age'; a lone start step, nothing."""
+    ages = [int(a) for a in steps]
+    if not ages or ages == [0]:
+        return ""
+    if len(ages) == 1:
+        return f" from the {AGE_NAMES[ages[0]]} Age"
+    return f" in the {'/'.join(AGE_NAMES[a] for a in ages)} Age"
+
+
+def _a(name: str) -> str:
+    return f"{'an' if name[:1].lower() in 'aeiou' else 'a'} {name}"
+
+
+def gate_text(card: dict) -> str:
+    """' from the Castle Age', ' once a Mill is built', both, or ''.  A growing
+    card names its ages per effect, so only the building is left here."""
+    when = card.get("when") or {}
+    parts = []
+    if when.get("age") and card_family(card) != "civ":    # a civ card says it per grant
+        parts.append(f"from the {CIV_AGES[when['age']]} Age")
+    if when.get("building_name"):
+        parts.append(f"once {_a(when['building_name'])} is built")
+    return (" " + ", ".join(parts)) if parts else ""
+
+
+def _civ_effect_text(eff: dict, age, building: bool = False) -> str:
     """'+25 population limit in the Imperial Age', '+100 stone at the start',
-    '+200 wood on reaching the Castle Age' — the game's own phrasing."""
+    '+200 wood on reaching the Castle Age' — the game's own phrasing.  With a
+    building gate a grant isn't "at the start"; gate_text says when."""
     v = eff["value"]
     num = f"{'+' if v > 0 else '-'}{_fmt_num(abs(v))}"
     era = CIV_AGES.get(age)
     if eff["attr"] == "resources":
         what = "of each resource" if eff.get("resource") == "each" else eff.get("resource", "gold")
-        when = f"on reaching the {era} Age" if era else "at the start"
-        return f"{num} {what} {when}"
+        when = f" on reaching the {era} Age" if era else "" if building else " at the start"
+        return f"{num} {what}{when}"
     if eff["attr"] == "convert_time":
         n = abs(v)
         text = f"Monks convert {_fmt_num(n)} second{'s' if n != 1 else ''} {'faster' if v < 0 else 'slower'}"
@@ -831,7 +982,7 @@ def _civ_effect_text(eff: dict, age) -> str:
     return f"{num} {ATTRS[eff['attr']]['label']}" + (f" in the {era} Age" if era else "")
 
 
-def civ_steps(card: dict) -> list[dict]:
+def civ_steps(card: dict, resolve=None) -> list[dict]:
     """The techs a Civilization card builds: [{cmds, reqs, after}].
 
     `reqs` are prerequisite tech ids; `after` is the index of an earlier step
@@ -842,8 +993,11 @@ def civ_steps(card: dict) -> list[dict]:
                         then the stockpile on a second tech after it —
                         "C-Bonus, +50g" -> "Post-TC +50g"
       start, negative   Starting X only, on 639 — the Chinese "-200f -50w"
+    A building gate makes every grant a gated one: it's paid when the building
+    goes up (and the age, if there is one, is reached).
     """
-    age = card["targets"][0].get("age")
+    gate = _gate_reqs(card, resolve)
+    age = gate[0] if gate else None          # anything gated takes the gated path
     gated: list = []
     start_pos_start: list = []
     start_pos_stock: list = []
@@ -867,13 +1021,75 @@ def civ_steps(card: dict) -> list[dict]:
                     start_neg.append(EffectCommand(type=1, a=_STARTING_RES + r, b=1, c=-1, d=d))
     steps: list[dict] = []
     if gated:
-        steps.append({"cmds": gated, "reqs": [age] if age else [], "after": None})
+        steps.append({"cmds": gated, "reqs": gate, "after": None})
     if start_pos_start:
         steps.append({"cmds": start_pos_start, "reqs": [_TC_SPAWN, _TC_EXISTS], "after": None})
         steps.append({"cmds": start_pos_stock, "reqs": [], "after": len(steps) - 1})
     if start_neg:
         steps.append({"cmds": start_neg, "reqs": [_TC_SPAWN], "after": None})
     return steps
+
+
+def _gate_reqs(card: dict, resolve=None, age=None) -> list[int]:
+    """Prerequisite tech ids for a card's gate: the age (or `age`, for one step
+    of a growing card), then the building's marker.  The build resolves the
+    marker from the civ's own building; without it (a pure test), vanilla's."""
+    when = card.get("when") or {}
+    age = when.get("age") if age is None else age
+    reqs = [age] if age else []
+    bid = when.get("building")
+    if bid in TRIGGER_BUILDINGS:
+        marker = resolve("trigger", bid) if resolve else TRIGGER_BUILDINGS[bid][1]
+        reqs.append(marker if marker is not None else -1)    # -1: never fires; the build warns
+    return reqs
+
+
+def _increment(eff: dict, total: float, prev: float) -> float:
+    """What one step adds so the running total reaches `total`.  A flat amount
+    is the difference; a percentage is the ratio, because each step multiplies
+    on top of the last: +10% then +20% total is x1.1 then x1.2/1.1, not x1.1
+    twice.  "N% faster" divides by (1 + N/100), so its ratio works the same."""
+    if eff["op"] == "mul" or ATTRS[eff["attr"]].get("faster"):
+        return round(((1 + total / 100) / (1 + prev / 100) - 1) * 100, 9)
+    return total - prev
+
+
+def card_steps(card: dict, line_of, resolve=None) -> list[dict]:
+    """The techs a card builds, [{cmds, reqs, after}] (see civ_steps).
+
+      from the start      one step, no prerequisites — every card before gating
+      from an age / once a building is built   one step, gated
+      grows each age      one step per age that changes something, each gated
+                          on its age (and the building), adding the increment
+    """
+    if card_family(card) == "civ":
+        return civ_steps(card, resolve)
+    when = card.get("when") or {}
+    if not when.get("steps"):
+        cmds = _plain_commands(card, line_of, resolve)
+        return [{"cmds": cmds, "reqs": _gate_reqs(card, resolve), "after": None}] if cmds else []
+    first = min((int(a) for e in card["effects"] for a in e.get("steps", {})), default=0)
+    out: list[dict] = []
+    for age in STEP_AGES:
+        effects = []
+        for e in card["effects"]:
+            if "steps" not in e:
+                if age == first:                       # free / instant: at the first step
+                    effects.append(e)
+                continue
+            if str(age) not in e["steps"]:
+                continue
+            before = [v for a, v in sorted((int(a), v) for a, v in e["steps"].items()) if a < age]
+            inc = _increment(e, e["steps"][str(age)], before[-1] if before else 0)
+            if inc:
+                effects.append({k: v for k, v in e.items() if k != "steps"} | {"value": inc})
+        if not effects:
+            continue
+        cmds = _plain_commands({**card, "effects": effects}, line_of, resolve)
+        if cmds:
+            # A growing card has no `when.age`; age 0 (the start) gates on nothing.
+            out.append({"cmds": cmds, "reqs": _gate_reqs(card, resolve, age=age), "after": None})
+    return out
 
 
 # ── Shortcodes in the player's own card text ────────────────────────────────
@@ -921,12 +1137,14 @@ def card_text(card: dict) -> str:
     if card.get("text"):
         return game_text(card["text"])
     targets = card["targets"]
+    when = card.get("when") or {}
     if targets[0]["type"] == "civ":
-        return ", ".join(_civ_effect_text(e, targets[0].get("age")) for e in card["effects"])
+        return ", ".join(_civ_effect_text(e, when.get("age"), bool(when.get("building")))
+                         for e in card["effects"]) + gate_text(card)
     subject = _join([target_subject(t) for t in targets])
     # A job's own word for work rate ("gather rate") only when it is the only target.
     named = targets[0] if len(targets) == 1 else None
-    return f"{subject}: " + ", ".join(effect_text(e, named) for e in card["effects"])
+    return f"{subject}: " + ", ".join(effect_text(e, named) for e in card["effects"]) + gate_text(card)
 
 
 def target_subject(t: dict) -> str:
@@ -1088,9 +1306,15 @@ def tech_effect_commands(eff: dict, tech_ids: list[int], costs_of=None) -> list[
 
 
 def card_commands(card: dict, line_of, resolve=None) -> list[EffectCommand]:
-    """Every command one card writes, in card order.  See _selectors."""
-    if card_family(card) == "civ":
-        return [c for step in civ_steps(card) for c in step["cmds"]]
+    """Every command one card writes, in step order (see card_steps) — for a
+    team bonus or unique tech, which only take ungated cards, that is simply
+    card order."""
+    return [c for step in card_steps(card, line_of, resolve) for c in step["cmds"]]
+
+
+def _plain_commands(card: dict, line_of, resolve=None) -> list[EffectCommand]:
+    """The commands for a card's effects at their `value`, in card order — one
+    step's worth, ignoring `when`.  See _selectors."""
     if card_family(card) == "tech":
         tids = _tech_ids(card, resolve)
         costs_of = (lambda tid: resolve("tech_costs", tid)) if resolve else None
@@ -1149,6 +1373,10 @@ def team_problem(card: dict) -> str | None:
         return "Tech bonuses can't be team bonuses — allies research their own copies of some techs."
     if fam == "civ":
         return "Civilization bonuses can't be team bonuses — they're built as one-off events for this civ."
+    if card.get("when"):
+        # Gates are techs of our own; the team Effect has no prerequisites, and
+        # no vanilla team bonus waits for an age or a building.
+        return "Bonuses that wait for an age or a building can't be team bonuses — the game's own never do."
     if any(t["type"] == "group" and GROUPS[t["id"]].get("uu") for t in card["targets"]):
         return "\"Unique unit\" means this civ's unique unit, which allies don't train."
     if any(e["attr"] == "pop_space" for e in card["effects"]):
@@ -1165,6 +1393,8 @@ def ut_problem(card: dict) -> str | None:
     age, each as its own tech (civ_steps)."""
     if card_family(card) == "civ":
         return "Civilization bonuses can't go in a unique tech — they're tied to the start of the game or an age."
+    if card.get("when"):
+        return "Bonuses that wait for an age or a building can't go in a unique tech — researching it is the trigger."
     return None
 
 

@@ -2074,6 +2074,27 @@ img.card-main-image {
 .cb-editor--art .cb-tile.selected { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); background: #fff6d6; }
 .cb-editor--art .cb-chosen-chip { border-color: var(--gold); }
 .cb-editor--art .cb-tile:not(:disabled) { cursor: url("../cursor-pick-image.svg") 1 1, copy; }
+/* When: mode tabs, then the age (From an age), then the building. */
+.cb-when-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.cb-tabs--sm .cb-tab { padding: .25rem .65rem; font-size: .8rem; }
+.cb-tab:disabled { opacity: .45; cursor: not-allowed; }
+.cb-tab:disabled:hover { background: var(--parch-light); }
+.cb-when-ages .cb-tab img { width: 1rem; height: 1rem; object-fit: contain; margin-right: .3rem; vertical-align: -3px; }
+.cb-when-building { width: auto; min-width: 11rem; }
+/* Grows each age: four age boxes in place of the one amount. */
+.cb-steps { display: flex; gap: .3rem; flex: 0 1 auto; }
+.cb-step { display: flex; align-items: center; gap: .15rem; margin: 0; }
+.cb-step .bc-age-badge { flex: none; font-size: .7rem; font-weight: 700; }
+.cb-step input { width: 3.6rem; }
+.cb-effect--steps .cb-attr { flex: 1 1 8rem; }
+.cb-effect--steps .cb-op, .cb-effect--steps .cb-res { flex: 0 1 6rem; }
+.cb-step input::placeholder { color: var(--ash); opacity: .7; }
+/* A gated card's "From Castle Age · Once a Mill is built". */
+.cb-card-when {
+  font-size: .68rem; line-height: 1.2; text-align: center; color: var(--ink-light);
+  margin: .15rem 0 .1rem; font-style: italic;
+}
+.cb-card-when i { color: var(--gold); font-size: .62rem; }
 /* Text links in the editor (Clear, Use automatic): ink, not Bootstrap blue. */
 .cb-editor .cb-link { color: var(--ink-light); text-decoration: underline dotted; text-underline-offset: 2px; font-weight: 500; }
 .cb-editor .cb-link:hover, .cb-editor .cb-link:focus-visible { color: var(--crimson); text-decoration-style: solid; }

@@ -91,6 +91,7 @@ else
     run "dat_path fallback"       "$PY" tests/test_dat_path_fallback.py
     run "issues 38-44 batch"      "$PY" tests/test_issues_40_44.py
     run "custom bonus composer"   "$PY" tests/test_custom_bonus.py
+    run "custom bonus gating"     "$PY" tests/test_custom_bonus_when.py
     run "UT text, both routes"    "$PY" tests/test_ut_description_routes.py
 fi
 
