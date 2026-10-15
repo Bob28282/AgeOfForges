@@ -52,6 +52,10 @@ Grab the latest release from the [Releases page](https://github.com/napkingcole/
 
 The in-app **How It Works** and **Known Limitations** pages have the full walkthrough and the current list of unsupported bonus effects.
 
+## Going further: your own changes on top
+
+Want something Empire Forge deliberately doesn't offer — villagers building rams, Outposts that explode? [docs/EXTENDING.md](docs/EXTENDING.md) shows how to add your own changes to a mod Empire Forge built, with a ready-to-run [template script](extend/post_build_template.py) and a brief for your AI code editor. It needs Python; Empire Forge itself never does.
+
 ## Requirements
 
 - Age of Empires II: Definitive Edition installed (Steam or Microsoft Store) — Empire Forge finds your game data automatically.
