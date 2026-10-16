@@ -1095,7 +1095,10 @@ def append_km_custom_uu(dat: DatFile, civ_index: int, km_uu_index: int,
     new_id = len(dat.civs[0].units)
     uu_id, elite_id = new_id, new_id + 1
 
-    for civ in dat.civs:
+    # Every civ, and the originals an earlier civ in this build replaced, so a
+    # civ cloned from one later lines up (civ_appender._original_civs).
+    from civ_appender import _every_civ
+    for civ in _every_civ(dat):
         base = civ.units[base_id]
         uu = deepcopy(base)
         uu.id = uu_id

@@ -2964,7 +2964,8 @@ _TRAIN_BUILDING_NAMES = {82: "Castle", 12: "Barracks", 101: "Stable", 87: "Arche
 
 def _apply_unit_skin(dat: DatFile, civ_index: int, spec: dict,
                      extra_unit_strings: list | None) -> bool:
-    src = next((c for c in dat.civs if c.name == spec["source_civ"]), None)
+    # By vanilla name, and as shipped: a replaced slot keeps its vanilla name.
+    src = next((c for c in [*_original_civs(dat).values(), *dat.civs] if c.name == spec["source_civ"]), None)
     if src is None:
         print(f"       WARNING: {spec['name']}: no {spec['source_civ']} civ in this DAT — skipped")
         return True
@@ -3190,7 +3191,7 @@ def _setup_imperial_scorpion_unit(dat: DatFile) -> None:
     # the first call needs to do work since the result is identical for all civs.
     if dat.civs[0].units[_IMP_SCORPION] is not None and dat.civs[0].units[_IMP_SCORPION].name == "IMPBAL":
         return
-    for civ in dat.civs:
+    for civ in _every_civ(dat):           # kept originals too (_original_civs)
         src = civ.units[_HEAVY_SCORPION]
         if src is None:
             continue
@@ -3249,7 +3250,7 @@ def _setup_royal_battle_elephant_unit(dat: DatFile) -> None:
     # have bonus 309.
     if dat.civs[0].units[_ROYAL_ELEPHANT] is not None and dat.civs[0].units[_ROYAL_ELEPHANT].name == "RBATELE":
         return
-    for civ in dat.civs:
+    for civ in _every_civ(dat):           # kept originals too (_original_civs)
         src = civ.units[_ELITE_BATTLE_ELEPHANT]
         if src is None:
             continue
@@ -3287,7 +3288,7 @@ def _setup_royal_lancer_unit(dat: DatFile) -> None:
     # have bonus 310.
     if dat.civs[0].units[_ROYAL_LANCER] is not None and dat.civs[0].units[_ROYAL_LANCER].name == "RSLANCER":
         return
-    for civ in dat.civs:
+    for civ in _every_civ(dat):           # kept originals too (_original_civs)
         src = civ.units[_ELITE_STEPPE_LANCER]
         if src is None:
             continue
@@ -6270,6 +6271,37 @@ _MONK_VOICE_UNITS = (125, 286)
 _VILLAGER_BY_GENDER = {False: 83, True: 293}       # male / female Villager
 
 
+def _original_civs(dat: DatFile) -> dict:
+    """{slot: the vanilla Civ object an earlier apply_civ overwrote} for this
+    DatFile.
+
+    build_all builds several civs on one DAT, and a later civ reads other
+    slots as SOURCES: the Britons as its template, a vanilla civ for its
+    architecture, castle, wonder and monk skin.  Reading `dat.civs[i]` after
+    an earlier civ replaced slot i reads that custom civ instead — a plain civ
+    built after a Britons-slot civ with card 330 came out with its big farms.
+    Overwriting rebinds the slot, so the original object survives; it is kept
+    here, and _every_civ keeps it in step with the edits made to every civ."""
+    kept = getattr(dat, "_ef_original_civs", None)
+    if kept is None:
+        kept = dat._ef_original_civs = {}
+    return kept
+
+
+def _original_civ(dat: DatFile, idx: int):
+    """Slot `idx` as the game shipped it: the kept original if an earlier civ
+    in this build replaced it, else the slot itself."""
+    return _original_civs(dat).get(idx, dat.civs[idx])
+
+
+def _every_civ(dat: DatFile) -> list:
+    """Every civ's data for an edit that must reach ALL civs (a unit appended
+    or a spare slot filled in each civ): the slots, plus the kept originals,
+    so a civ later cloned from one lines up with the rest.  Reads that only
+    scan the tech trees iterate dat.civs as before."""
+    return [*dat.civs, *_original_civs(dat).values()]
+
+
 def _female_monk_civs(dat: DatFile) -> set[int]:
     """DAT civ indices whose vanilla Monk is a woman, read once per DatFile.
 
@@ -6475,8 +6507,10 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
             n_nullified += 1
         print(f"       Nullified {n_nullified} existing civ={civ_index} techs")
 
-    # 1. Clone from civ 1 (first playable vanilla civ — full standard unit set).
-    new_civ = deepcopy(dat.civs[1])
+    # 1. Clone from civ 1 (first playable vanilla civ — full standard unit set)
+    # AS SHIPPED: when an earlier civ in this build took the Britons slot, its
+    # edits must not become every later civ's starting point (_original_civs).
+    new_civ = deepcopy(_original_civ(dat, 1))
     # Preserve the slot's vanilla DAT name ("British", "French", ...). The engine
     # appears to key civ-description lookup off this field, so renaming it to the
     # alias makes the picker fall back to the base game's vanilla description.
@@ -6509,8 +6543,8 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     castle_raw = civ_def.get("castle") if "castle" in civ_def else civ_def.get("castle_model", -1)
     castle_src = _graphic_src(castle_raw)
     if castle_src > 1 and castle_src < len(dat.civs):
-        src_units = dat.civs[castle_src].units
-        castle_civ_name = dat.civs[castle_src].name
+        src_units = _original_civ(dat, castle_src).units
+        castle_civ_name = _original_civ(dat, castle_src).name
         origin = "explicit" if isinstance(castle_raw, int) and castle_raw >= 0 else "architecture default"
         print(f"       Castle: copying from DAT civ {castle_src} ({castle_civ_name!r}) [{origin}]")
         if len(src_units) > 82 and src_units[82] is not None:
@@ -6520,22 +6554,23 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     wonder_raw = civ_def.get("wonder") if "wonder" in civ_def else civ_def.get("wonder_model", -1)
     wonder_src = _graphic_src(wonder_raw)
     if wonder_src > 1 and wonder_src < len(dat.civs):
-        src_units = dat.civs[wonder_src].units
+        src_units = _original_civ(dat, wonder_src).units
         origin = "explicit" if isinstance(wonder_raw, int) and wonder_raw >= 0 else "architecture default"
         print(f"       Wonder: copying from DAT civ {wonder_src} "
-              f"({dat.civs[wonder_src].name!r}) [{origin}]")
+              f"({_original_civ(dat, wonder_src).name!r}) [{origin}]")
         if len(src_units) > 276 and src_units[276] is not None:
             new_civ.units[276] = deepcopy(src_units[276])
 
-    # Capture the graphic source civs BEFORE the slot is overwritten below.
-    # Overwriting rebinds dat.civs[civ_index], but these references keep the
-    # original Civ objects alive — which is what makes "replace Byzantines and
-    # choose Mediterranean" work instead of silently copying the half-built
-    # replacement onto itself.
-    arch_src_civ = dat.civs[arch_src] if arch_src is not None and arch_src < len(dat.civs) else None
+    # Graphic sources are the vanilla civs as shipped (_original_civ), captured
+    # BEFORE this slot is overwritten below — "replace Byzantines and choose
+    # Mediterranean" must not copy the half-built replacement onto itself, and
+    # "Western European" must not copy whatever civ took the Britons slot
+    # earlier in this build.
+    arch_src_civ = (_original_civ(dat, arch_src)
+                    if arch_src is not None and arch_src < len(dat.civs) else None)
 
     monk_src = civ_def.get("monk_skin", -1)
-    monk_src_civ = (dat.civs[monk_src]
+    monk_src_civ = (_original_civ(dat, monk_src)
                     if isinstance(monk_src, int) and 0 < monk_src < len(dat.civs)
                     else None)
     # Read the vanilla Monk genders before this slot is overwritten (cached).
@@ -6543,6 +6578,7 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     _voice_idx = int(civ_def.get("language", 0) or 0) + 1
 
     if overwrite:
+        _original_civs(dat).setdefault(civ_index, dat.civs[civ_index])   # first replacement keeps vanilla
         dat.civs[civ_index] = new_civ
     else:
         dat.civs.append(new_civ)
