@@ -38,6 +38,13 @@
       <span class="step-badge">1</span> Civilization Identity
     </div>
     <div class="card-body">
+      {# Shown when the civ list came from Empire Forge's own copy, not the game (_showRosterNotice). #}
+      <div id="roster-notice" class="alert alert-warning d-none py-2 small mb-3" role="status">
+        <i class="fa-solid fa-triangle-exclamation me-1"></i>
+        <strong>Empire Forge couldn't find your game.</strong>
+        The civ lists below (castles, wonders, voices) come from Empire Forge's own copy, which can miss civs a recent
+        game update added. <a href="#dat-path-input" id="roster-notice-link">Set your game files</a> below and they'll update.
+      </div>
 
       <div class="row g-3 mb-4">
         <div class="col-md-6">

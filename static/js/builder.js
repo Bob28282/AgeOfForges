@@ -4099,10 +4099,45 @@ document.getElementById("btn-open-tree").addEventListener("click", async () => {
 
 // ── Bootstrap: fetch meta & restore draft ────────────────────────────────────
 
+// The civ lists come from the player's game; the draft's own path (step 1's
+// Game Files) wins over detection, so a game that wasn't auto-detected still
+// gets its real list once the player points at it.
+function _metaUrl() {
+  return draft.dat_path ? `/api/builder/meta?dat_path=${encodeURIComponent(draft.dat_path)}`
+                        : "/api/builder/meta";
+}
+
+let _rosterFromGame = true;
+function _showRosterNotice(fromGame) {
+  _rosterFromGame = !!fromGame;
+  document.getElementById("roster-notice")?.classList.toggle("d-none", _rosterFromGame);
+}
+
+// After step 1's path checks out: if the civ lists came from our copy, reload
+// them from the game and redraw what depends on them.
+async function _refreshCivRoster() {
+  if (_rosterFromGame) return;
+  try {
+    const meta = await (await fetch(_metaUrl())).json();
+    if (!meta.roster_from_game) return;
+    window._metaCivs = meta.civs;
+    _sceneNames      = meta.scene_names     || {};
+    _sceneArtIndex   = meta.scene_art_index || {};
+    populateSelect("wonder-select", meta.civs, draft.wonder, DEFAULT_OPTION_LABEL,
+                   o => SCENE_SLOTS.wonder.name(o.value));
+    populateSelect("castle-select", meta.civs, draft.castle, DEFAULT_OPTION_LABEL,
+                   o => `${o.label} Castle`);
+    populateVoiceSelect(meta.voices, draft.language);
+    renderScene();
+    _showRosterNotice(true);
+  } catch (e) { /* keep the lists we have */ }
+}
+
 async function init() {
   try {
-    const res  = await fetch("/api/builder/meta");
+    const res  = await fetch(_metaUrl());
     const meta = await res.json();
+    _showRosterNotice(meta.roster_from_game);
 
     window._metaArchitectures = meta.architectures;
     window._metaCivs          = meta.civs;
@@ -4181,6 +4216,7 @@ async function init() {
         datStatus.textContent = "✓ Auto-detected";
         datStatus.className   = "form-text text-success";
         _prewarmDat(draft.dat_path);
+        _refreshCivRoster();
       } else {
         datStatus.innerHTML   = "Not auto-detected — enter path manually.<br>"
           + "<small>Steam: <code>…/Steam/steamapps/common/AoE2DE/resources/_common/dat/empires2_x2_p1.dat</code><br>"
@@ -4229,6 +4265,7 @@ async function init() {
           : `✓ Game files found (${d.size_mb} MB)`;
         datStatus.className = d.reason ? "form-text text-warning" : "form-text text-success";
         _prewarmDat(draft.dat_path);
+        _refreshCivRoster();
       } else {
         datStatus.textContent = `✕ ${d.reason}`;
         datStatus.className   = "form-text text-danger";

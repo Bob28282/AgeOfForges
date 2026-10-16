@@ -19,6 +19,7 @@
         "/resources/uniticons/041_50730.png"
       ],
       "name_string_id": 10271,
+      "tech_tree_description_string_id": 120150,
       "computer_name_string_table_offset": 4400,
       "unique_tech_id_1": 3,
       "unique_tech_id_2": 461,
@@ -45,9 +46,10 @@
         "/resources/uniticons/046_50730.png"
       ],
       "name_string_id": 10272,
+      "tech_tree_description_string_id": 120151,
       "computer_name_string_table_offset": 4420,
       "unique_tech_id_1": 493,
-      "unique_tech_id_2": 83,
+      "unique_tech_id_2": 1496,
       "unique_unit_line": -271,
       "unique_unit_upgrade_id": 363,
       "unique_unit_id": 281,
@@ -71,6 +73,7 @@
         "/resources/uniticons/050_50730.png"
       ],
       "name_string_id": 10273,
+      "tech_tree_description_string_id": 120152,
       "computer_name_string_table_offset": 4440,
       "unique_tech_id_1": 457,
       "unique_tech_id_2": 16,
@@ -97,6 +100,7 @@
         "/resources/uniticons/045_50730.png"
       ],
       "name_string_id": 10274,
+      "tech_tree_description_string_id": 120153,
       "computer_name_string_table_offset": 4460,
       "unique_tech_id_1": 11,
       "unique_tech_id_2": 489,
@@ -123,6 +127,7 @@
         "/resources/uniticons/044_50730.png"
       ],
       "name_string_id": 10275,
+      "tech_tree_description_string_id": 120154,
       "computer_name_string_table_offset": 4480,
       "unique_tech_id_1": 59,
       "unique_tech_id_2": 484,
@@ -150,6 +155,7 @@
         "/resources/uniticons/178_50730.png"
       ],
       "name_string_id": 10276,
+      "tech_tree_description_string_id": 120155,
       "computer_name_string_table_offset": 4500,
       "unique_tech_id_1": 52,
       "unique_tech_id_2": 462,
@@ -180,6 +186,7 @@
         "/resources/uniticons/035_50730.png"
       ],
       "name_string_id": 10277,
+      "tech_tree_description_string_id": 120156,
       "computer_name_string_table_offset": 4520,
       "unique_tech_id_1": 61,
       "unique_tech_id_2": 464,
@@ -207,6 +214,7 @@
         "/resources/uniticons/410_50730.png"
       ],
       "name_string_id": 10278,
+      "tech_tree_description_string_id": 120157,
       "computer_name_string_table_offset": 4540,
       "unique_tech_id_1": 7,
       "unique_tech_id_2": 488,
@@ -237,6 +245,7 @@
         "/resources/uniticons/037_50730.png"
       ],
       "name_string_id": 10279,
+      "tech_tree_description_string_id": 120158,
       "computer_name_string_table_offset": 4560,
       "unique_tech_id_1": 454,
       "unique_tech_id_2": 28,
@@ -263,6 +272,7 @@
         "/resources/uniticons/039_50730.png"
       ],
       "name_string_id": 10280,
+      "tech_tree_description_string_id": 120159,
       "computer_name_string_table_offset": 4580,
       "unique_tech_id_1": 10,
       "unique_tech_id_2": 491,
@@ -282,14 +292,14 @@
       "internal_name": "Vikings",
       "tech_tree_name": "VIKINGS",
       "data_name": "VIKING-CIV",
-      "hud_style": "CivSlav",
+      "hud_style": "CivNord",
       "tech_tree_image_path": "/resources/civ_techtree/menu_techtree_vikings.png",
       "emblem_image_path": "/resources/civ_emblems/vikings.png",
       "unique_unit_image_paths": [
-        "/resources/uniticons/038_50730.png",
-        "/resources/uniticons/040_50730.png"
+        "/resources/uniticons/038_50730.png"
       ],
       "name_string_id": 10281,
+      "tech_tree_description_string_id": 120160,
       "computer_name_string_table_offset": 4600,
       "unique_tech_id_1": 49,
       "unique_tech_id_2": 463,
@@ -301,10 +311,6 @@
         {
           "name": 5076,
           "description": 26574
-        },
-        {
-          "name": 5106,
-          "description": 26106
         }
       ],
       "era": "base"
@@ -320,6 +326,7 @@
         "/resources/uniticons/042_50730.png"
       ],
       "name_string_id": 10282,
+      "tech_tree_description_string_id": 120161,
       "computer_name_string_table_offset": 4620,
       "unique_tech_id_1": 6,
       "unique_tech_id_2": 487,
@@ -346,6 +353,7 @@
         "/resources/uniticons/047_50730.png"
       ],
       "name_string_id": 10283,
+      "tech_tree_description_string_id": 120162,
       "computer_name_string_table_offset": 4640,
       "unique_tech_id_1": 5,
       "unique_tech_id_2": 482,
@@ -373,6 +381,7 @@
         "/resources/uniticons/107_50730.png"
       ],
       "name_string_id": 10284,
+      "tech_tree_description_string_id": 120163,
       "computer_name_string_table_offset": 5800,
       "unique_tech_id_1": 440,
       "unique_tech_id_2": 492,
@@ -403,6 +412,7 @@
         "/resources/uniticons/110_50730.png"
       ],
       "name_string_id": 10285,
+      "tech_tree_description_string_id": 120164,
       "computer_name_string_table_offset": 5820,
       "unique_tech_id_1": 24,
       "unique_tech_id_2": 460,
@@ -429,6 +439,7 @@
         "/resources/uniticons/108_50730.png"
       ],
       "name_string_id": 10286,
+      "tech_tree_description_string_id": 120165,
       "computer_name_string_table_offset": 5840,
       "unique_tech_id_1": 4,
       "unique_tech_id_2": 485,
@@ -455,6 +466,7 @@
         "/resources/uniticons/105_50730.png"
       ],
       "name_string_id": 10287,
+      "tech_tree_description_string_id": 120166,
       "computer_name_string_table_offset": 5860,
       "unique_tech_id_1": 21,
       "unique_tech_id_2": 483,
@@ -482,6 +494,7 @@
         "/resources/uniticons/116_50730.png"
       ],
       "name_string_id": 10288,
+      "tech_tree_description_string_id": 120167,
       "computer_name_string_table_offset": 5880,
       "unique_tech_id_1": 445,
       "unique_tech_id_2": 486,
@@ -513,6 +526,7 @@
         "/resources/uniticons/134_50730.png"
       ],
       "name_string_id": 10289,
+      "tech_tree_description_string_id": 120168,
       "computer_name_string_table_offset": 5900,
       "unique_tech_id_1": 499,
       "unique_tech_id_2": 494,
@@ -544,6 +558,7 @@
         "/resources/uniticons/185_50730.png"
       ],
       "name_string_id": 10290,
+      "tech_tree_description_string_id": 120169,
       "computer_name_string_table_offset": 5920,
       "unique_tech_id_1": 507,
       "unique_tech_id_2": 506,
@@ -574,6 +589,7 @@
         "/resources/uniticons/097_50730.png"
       ],
       "name_string_id": 10291,
+      "tech_tree_description_string_id": 120170,
       "computer_name_string_table_offset": 5940,
       "unique_tech_id_1": 517,
       "unique_tech_id_2": 516,
@@ -600,6 +616,7 @@
         "/resources/uniticons/099_50730.png"
       ],
       "name_string_id": 10292,
+      "tech_tree_description_string_id": 120171,
       "computer_name_string_table_offset": 5960,
       "unique_tech_id_1": 515,
       "unique_tech_id_2": 514,
@@ -626,6 +643,7 @@
         "/resources/uniticons/114_50730.png"
       ],
       "name_string_id": 10293,
+      "tech_tree_description_string_id": 120172,
       "computer_name_string_table_offset": 5980,
       "unique_tech_id_1": 513,
       "unique_tech_id_2": 455,
@@ -653,6 +671,7 @@
         "/resources/uniticons/198_50730.png"
       ],
       "name_string_id": 10294,
+      "tech_tree_description_string_id": 120173,
       "computer_name_string_table_offset": 106000,
       "unique_tech_id_1": 573,
       "unique_tech_id_2": 1404,
@@ -683,6 +702,7 @@
         "/resources/uniticons/195_50730.png"
       ],
       "name_string_id": 10295,
+      "tech_tree_description_string_id": 120174,
       "computer_name_string_table_offset": 106020,
       "unique_tech_id_1": 574,
       "unique_tech_id_2": 575,
@@ -709,6 +729,7 @@
         "/resources/uniticons/197_50730.png"
       ],
       "name_string_id": 10296,
+      "tech_tree_description_string_id": 120175,
       "computer_name_string_table_offset": 106040,
       "unique_tech_id_1": 577,
       "unique_tech_id_2": 576,
@@ -736,6 +757,7 @@
         "/resources/uniticons/201_50730.png"
       ],
       "name_string_id": 10297,
+      "tech_tree_description_string_id": 120176,
       "computer_name_string_table_offset": 106060,
       "unique_tech_id_1": 579,
       "unique_tech_id_2": 578,
@@ -766,6 +788,7 @@
         "/resources/uniticons/231_50730.png"
       ],
       "name_string_id": 10298,
+      "tech_tree_description_string_id": 120177,
       "computer_name_string_table_offset": 106080,
       "unique_tech_id_1": 623,
       "unique_tech_id_2": 622,
@@ -792,6 +815,7 @@
         "/resources/uniticons/233_50730.png"
       ],
       "name_string_id": 10299,
+      "tech_tree_description_string_id": 120178,
       "computer_name_string_table_offset": 106100,
       "unique_tech_id_1": 625,
       "unique_tech_id_2": 624,
@@ -818,6 +842,7 @@
         "/resources/uniticons/230_50730.png"
       ],
       "name_string_id": 10300,
+      "tech_tree_description_string_id": 120179,
       "computer_name_string_table_offset": 106120,
       "unique_tech_id_1": 627,
       "unique_tech_id_2": 626,
@@ -845,6 +870,7 @@
         "/resources/uniticons/229_50730.png"
       ],
       "name_string_id": 10301,
+      "tech_tree_description_string_id": 120180,
       "computer_name_string_table_offset": 106140,
       "unique_tech_id_1": 629,
       "unique_tech_id_2": 628,
@@ -875,6 +901,7 @@
         "/resources/uniticons/249_50730.png"
       ],
       "name_string_id": 10302,
+      "tech_tree_description_string_id": 120181,
       "computer_name_string_table_offset": 106160,
       "unique_tech_id_1": 686,
       "unique_tech_id_2": 685,
@@ -902,6 +929,7 @@
         "/resources/uniticons/270_50730.png"
       ],
       "name_string_id": 10303,
+      "tech_tree_description_string_id": 120182,
       "computer_name_string_table_offset": 106220,
       "unique_tech_id_1": 688,
       "unique_tech_id_2": 687,
@@ -932,6 +960,7 @@
         "/resources/uniticons/252_50730.png"
       ],
       "name_string_id": 10304,
+      "tech_tree_description_string_id": 120183,
       "computer_name_string_table_offset": 106180,
       "unique_tech_id_1": 690,
       "unique_tech_id_2": 689,
@@ -959,6 +988,7 @@
         "/resources/uniticons/371_50730.png"
       ],
       "name_string_id": 10305,
+      "tech_tree_description_string_id": 120184,
       "computer_name_string_table_offset": 106200,
       "unique_tech_id_1": 692,
       "unique_tech_id_2": 691,
@@ -990,6 +1020,7 @@
         "/resources/uniticons/354_50730.png"
       ],
       "name_string_id": 10306,
+      "tech_tree_description_string_id": 120185,
       "computer_name_string_table_offset": 106240,
       "unique_tech_id_1": 755,
       "unique_tech_id_2": 754,
@@ -1020,6 +1051,7 @@
         "/resources/uniticons/356_50730.png"
       ],
       "name_string_id": 10307,
+      "tech_tree_description_string_id": 120186,
       "computer_name_string_table_offset": 106260,
       "unique_tech_id_1": 757,
       "unique_tech_id_2": 756,
@@ -1047,6 +1079,7 @@
         "/resources/uniticons/371_50730.png"
       ],
       "name_string_id": 10308,
+      "tech_tree_description_string_id": 120187,
       "computer_name_string_table_offset": 106280,
       "unique_tech_id_1": 783,
       "unique_tech_id_2": 782,
@@ -1078,6 +1111,7 @@
         "/resources/uniticons/372_50730.png"
       ],
       "name_string_id": 10309,
+      "tech_tree_description_string_id": 120188,
       "computer_name_string_table_offset": 106300,
       "unique_tech_id_1": 785,
       "unique_tech_id_2": 784,
@@ -1109,6 +1143,7 @@
         "/resources/uniticons/387_50730.png"
       ],
       "name_string_id": 10310,
+      "tech_tree_description_string_id": 120189,
       "computer_name_string_table_offset": 106320,
       "unique_tech_id_1": 832,
       "unique_tech_id_2": 831,
@@ -1139,6 +1174,7 @@
         "/resources/uniticons/389_50730.png"
       ],
       "name_string_id": 10311,
+      "tech_tree_description_string_id": 120190,
       "computer_name_string_table_offset": 106340,
       "unique_tech_id_1": 834,
       "unique_tech_id_2": 833,
@@ -1167,6 +1203,7 @@
         "/resources/uniticons/392_50730.png"
       ],
       "name_string_id": 10312,
+      "tech_tree_description_string_id": 120191,
       "computer_name_string_table_offset": 106360,
       "unique_tech_id_1": 836,
       "unique_tech_id_2": 835,
@@ -1202,6 +1239,7 @@
         "/resources/uniticons/139_50730.png"
       ],
       "name_string_id": 10313,
+      "tech_tree_description_string_id": 120192,
       "computer_name_string_table_offset": 106380,
       "unique_tech_id_1": 884,
       "unique_tech_id_2": 883,
@@ -1233,6 +1271,7 @@
         "/resources/uniticons/409_50730.png"
       ],
       "name_string_id": 10314,
+      "tech_tree_description_string_id": 120193,
       "computer_name_string_table_offset": 106400,
       "unique_tech_id_1": 921,
       "unique_tech_id_2": 922,
@@ -1263,6 +1302,7 @@
         "/resources/uniticons/408_50730.png"
       ],
       "name_string_id": 10315,
+      "tech_tree_description_string_id": 120194,
       "computer_name_string_table_offset": 106420,
       "unique_tech_id_1": 924,
       "unique_tech_id_2": 923,
@@ -1289,6 +1329,7 @@
         "/resources/uniticons/621_50730.png"
       ],
       "name_string_id": 10316,
+      "tech_tree_description_string_id": 120195,
       "computer_name_string_table_offset": 106440,
       "unique_tech_id_1": 499,
       "unique_tech_id_2": 494,
@@ -1315,6 +1356,7 @@
         "/resources/uniticons/624_50730.png"
       ],
       "name_string_id": 10317,
+      "tech_tree_description_string_id": 120196,
       "computer_name_string_table_offset": 106460,
       "unique_tech_id_1": 499,
       "unique_tech_id_2": 494,
@@ -1342,6 +1384,7 @@
         "/resources/uniticons/623_50730.png"
       ],
       "name_string_id": 10318,
+      "tech_tree_description_string_id": 120197,
       "computer_name_string_table_offset": 106480,
       "unique_tech_id_1": 499,
       "unique_tech_id_2": 494,
@@ -1374,6 +1417,7 @@
         "/resources/uniticons/466_50730.png"
       ],
       "name_string_id": 10319,
+      "tech_tree_description_string_id": 120198,
       "computer_name_string_table_offset": 106500,
       "unique_tech_id_1": 1069,
       "unique_tech_id_2": 1070,
@@ -1410,6 +1454,7 @@
         "/resources/uniticons/467_50730.png"
       ],
       "name_string_id": 10320,
+      "tech_tree_description_string_id": 120199,
       "computer_name_string_table_offset": 106520,
       "unique_tech_id_1": 1081,
       "unique_tech_id_2": 1080,
@@ -1446,6 +1491,7 @@
         "/resources/uniticons/465_50730.png"
       ],
       "name_string_id": 10321,
+      "tech_tree_description_string_id": 120200,
       "computer_name_string_table_offset": 106540,
       "unique_tech_id_1": 1062,
       "unique_tech_id_2": 1061,
@@ -1481,6 +1527,7 @@
         "/resources/uniticons/462_50730.png"
       ],
       "name_string_id": 10322,
+      "tech_tree_description_string_id": 120201,
       "computer_name_string_table_offset": 106560,
       "unique_tech_id_1": 997,
       "unique_tech_id_2": 996,
@@ -1512,6 +1559,7 @@
         "/resources/uniticons/464_50730.png"
       ],
       "name_string_id": 10323,
+      "tech_tree_description_string_id": 120202,
       "computer_name_string_table_offset": 106580,
       "unique_tech_id_1": 1007,
       "unique_tech_id_2": 1006,
@@ -1543,6 +1591,7 @@
         "/resources/uniticons/704_50730.png"
       ],
       "name_string_id": 10324,
+      "tech_tree_description_string_id": 120203,
       "computer_name_string_table_offset": 106600,
       "unique_tech_id_1": 1062,
       "unique_tech_id_2": 1061,
@@ -1573,6 +1622,7 @@
         "/resources/uniticons/703_50730.png"
       ],
       "name_string_id": 10325,
+      "tech_tree_description_string_id": 120204,
       "computer_name_string_table_offset": 106620,
       "unique_tech_id_1": 1062,
       "unique_tech_id_2": 1061,
@@ -1600,6 +1650,7 @@
         "/resources/uniticons/710_50730.png"
       ],
       "name_string_id": 10326,
+      "tech_tree_description_string_id": 120205,
       "computer_name_string_table_offset": 106640,
       "unique_tech_id_1": 1062,
       "unique_tech_id_2": 1061,
@@ -1631,6 +1682,7 @@
         "/resources/uniticons/553_50730.png"
       ],
       "name_string_id": 10327,
+      "tech_tree_description_string_id": 120206,
       "computer_name_string_table_offset": 106660,
       "unique_tech_id_1": 1366,
       "unique_tech_id_2": 1365,
@@ -1662,6 +1714,7 @@
         "/resources/uniticons/547_50730.png"
       ],
       "name_string_id": 10328,
+      "tech_tree_description_string_id": 120207,
       "computer_name_string_table_offset": 106680,
       "unique_tech_id_1": 1380,
       "unique_tech_id_2": 1379,
@@ -1693,6 +1746,7 @@
         "/resources/uniticons/551_50730.png"
       ],
       "name_string_id": 10329,
+      "tech_tree_description_string_id": 120208,
       "computer_name_string_table_offset": 106700,
       "unique_tech_id_1": 1393,
       "unique_tech_id_2": 1392,
@@ -1708,6 +1762,87 @@
         {
           "name": 5522,
           "description": 26522
+        }
+      ],
+      "era": "base"
+    },
+    {
+      "internal_name": "Saxons",
+      "tech_tree_name": "SAXONS",
+      "data_name": "SAXONS-CIV",
+      "hud_style": "CivWest",
+      "tech_tree_image_path": "/resources/civ_techtree/menu_techtree_saxons.png",
+      "emblem_image_path": "/resources/civ_emblems/saxons.png",
+      "unique_unit_image_paths": [
+        "/resources/uniticons/904_50730.png"
+      ],
+      "name_string_id": 10330,
+      "tech_tree_description_string_id": 120209,
+      "computer_name_string_table_offset": 106720,
+      "unique_tech_id_1": 1464,
+      "unique_tech_id_2": 1491,
+      "unique_unit_line": -312,
+      "unique_unit_upgrade_id": 1462,
+      "unique_unit_id": 2705,
+      "elite_unique_unit_id": 2706,
+      "unique_unit_string_ids": [
+        {
+          "name": 5532,
+          "description": 26532
+        }
+      ],
+      "era": "base"
+    },
+    {
+      "internal_name": "Varangians",
+      "tech_tree_name": "VARANGIANS",
+      "data_name": "VARANGIANS-CIV",
+      "hud_style": "CivNord",
+      "tech_tree_image_path": "/resources/civ_techtree/menu_techtree_varangians.png",
+      "emblem_image_path": "/resources/civ_emblems/varangians.png",
+      "unique_unit_image_paths": [
+        "/resources/uniticons/906_50730.png"
+      ],
+      "name_string_id": 10331,
+      "tech_tree_description_string_id": 120210,
+      "computer_name_string_table_offset": 106740,
+      "unique_tech_id_1": 1474,
+      "unique_tech_id_2": 1473,
+      "unique_unit_line": -313,
+      "unique_unit_upgrade_id": 1472,
+      "unique_unit_id": 2708,
+      "elite_unique_unit_id": 2709,
+      "unique_unit_string_ids": [
+        {
+          "name": 5535,
+          "description": 26535
+        }
+      ],
+      "era": "base"
+    },
+    {
+      "internal_name": "Danes",
+      "tech_tree_name": "DANES",
+      "data_name": "DANES-CIV",
+      "hud_style": "CivNord",
+      "tech_tree_image_path": "/resources/civ_techtree/menu_techtree_danes.png",
+      "emblem_image_path": "/resources/civ_emblems/danes.png",
+      "unique_unit_image_paths": [
+        "/resources/uniticons/908_50730.png"
+      ],
+      "name_string_id": 10332,
+      "tech_tree_description_string_id": 120211,
+      "computer_name_string_table_offset": 106760,
+      "unique_tech_id_1": 1483,
+      "unique_tech_id_2": 1484,
+      "unique_unit_line": -314,
+      "unique_unit_upgrade_id": 1482,
+      "unique_unit_id": 2711,
+      "elite_unique_unit_id": 2712,
+      "unique_unit_string_ids": [
+        {
+          "name": 5539,
+          "description": 26539
         }
       ],
       "era": "base"

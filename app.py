@@ -1412,7 +1412,15 @@ def api_builder_meta():
         str(bid): list(spec["replaces"]) for bid, spec in _UNLOCK_UNIT_BONUSES.items()
         if spec.get("replaces")
     }
+    # Did the civ list come from the player's own game?  civ_roster falls back
+    # to the copy we ship when the game isn't found (or a hand-picked DAT has
+    # no civilizations.json beside it).  That copy is a backup and dates from
+    # our last release — civs a later patch added are missing from it — so the
+    # wizard says so rather than quietly offering the stale list.
+    from build_civ import _find_adjacent_json
+    roster_from_game = bool(dat_path and _find_adjacent_json(Path(dat_path), "civilizations.json"))
     return jsonify({
+        "roster_from_game": roster_from_game,
         "architectures": arch_options,
         "civs": civ_options,
         "voices": voice_options,
