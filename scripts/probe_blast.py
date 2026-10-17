@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import build_all                                            # noqa: E402
+import civ_appender                                         # noqa: E402
 from civ_appender import _add_auto_fire_tech, EC_ADD        # noqa: E402
 from genieutils.effect import EffectCommand                 # noqa: E402
 from civ_schema import FORMAT_KEY                           # noqa: E402
@@ -53,7 +54,7 @@ def tree_from(civ_file: str) -> dict:
 # into the Monastery before the +5 landed.  This writes +5 straight onto the
 # Monastery (and its old entries 30-32) as well; if the church shows it now,
 # building cards must also hit the pre-upgrade unit.
-_real_apply_civ = build_all.apply_civ
+_real_apply_civ = civ_appender.apply_civ
 
 
 def _apply_civ_with_probe(dat, civ_def, target_slot, *args, **kwargs):
@@ -67,7 +68,7 @@ def _apply_civ_with_probe(dat, civ_def, target_slot, *args, **kwargs):
 
 
 def main() -> None:
-    build_all.apply_civ = _apply_civ_with_probe
+    civ_appender.apply_civ = _apply_civ_with_probe
     dat_path = find_game_dat()
     if dat_path is None:
         sys.exit("No game DAT found.")

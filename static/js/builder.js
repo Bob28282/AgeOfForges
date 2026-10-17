@@ -125,6 +125,7 @@ function showStep(n) {
     btnNext.style.display = 'none';
     populateReview();
     renderButtonLayout();
+    if (_fu) _fuRender();       // shows "changed since this preview" if it has
   } else {
     btnNext.style.display = '';
     btnNext.innerHTML = 'Next <i class="fa-solid fa-arrow-right ms-1"></i>';
@@ -3011,6 +3012,192 @@ function _positionTooltip(el, e) {
 function _esc(s) {
   return (s || "").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
+
+// ── Fully-upgraded stats (step 9) ─────────────────────────────────────────────
+// On demand only: the server builds the civ into a copy of the DAT and
+// simulates a Post-Imperial start (fu_stats.py), so every number is read from
+// what the mod would contain, not added up from card text.  Two panes: unit
+// lines grouped by where they train, and one unit's stat card whose rows open
+// into the steps that produced them.
+
+// var, not let: showStep() can reach _fuRender while this file is still
+// loading (a draft restored on step 9), before a `let` would exist.
+var _fu = null;            // { data, snapshot, selected, query }
+var _fuReq = 0;
+
+const _FU_ICONS = {
+  hp: "heart", attack: "attack", melee_armor: "armor", pierce_armor: "pierce_armor",
+  range: "range", reload: "reload_time", speed: "speed", accuracy: "accuracy", los: "line_of_sight",
+};
+const _FU_RES = { 0: "food", 1: "wood", 2: "stone", 3: "gold" };
+
+function _fuNum(v, key) {
+  if (v === null || v === undefined) return "—";
+  if (key === "speed" || key === "reload") return (Math.round(v * 100) / 100).toString();
+  return (Math.round(v * 10) / 10).toString();
+}
+
+function _fuStep(s, key) {
+  let amt;
+  if (s.op === "add") amt = (s.amount >= 0 ? "+" : "−") + _fuNum(Math.abs(s.amount), key);
+  else if (s.op === "multiply") amt = "×" + (Math.round(s.amount * 1000) / 1000);
+  else amt = "= " + _fuNum(s.amount, key);
+  return `<li><span class="fu-step-amt">${amt}</span> ${_esc(s.source)}</li>`;
+}
+
+// A stat with no steps is a plain row; one with steps opens into them.
+function _fuRowHtml(head, base, steps, key, keepBase = false) {
+  if (!steps.length) {
+    return `<div class="fu-row fu-row-plain">${head}<span class="fu-base">${keepBase ? base : "unchanged"}</span></div>`;
+  }
+  return `<details class="fu-row">
+    <summary>${head}<span class="fu-base">${base}</span></summary>
+    <ol class="fu-steps">${steps.map(s => _fuStep(s, key)).join("")}</ol>
+  </details>`;
+}
+
+function _fuStatRow(st) {
+  const icon = _FU_ICONS[st.key];
+  const kind = st.kind ? ` <span class="fu-kind">${st.kind}</span>` : "";
+  const mixed = st.mixed
+    ? `<span class="fu-mixed" title="Built from both additions and multiplications. The game applies them in research order, and that order isn't confirmed for a Post-Imperial start, so treat this value as approximate.">
+         <i class="fa-solid fa-triangle-exclamation"></i></span>` : "";
+  const head = `
+    ${icon ? `<img class="fu-icon" src="/static/icons/properties/${icon}.png" alt="">` : `<span class="fu-icon"></span>`}
+    <span class="fu-label">${st.label}${kind}</span>
+    <span class="fu-value">${_fuNum(st.value, st.key)}${mixed}</span>`;
+  return _fuRowHtml(head, `base ${_fuNum(st.base, st.key)}`, st.steps, st.key);
+}
+
+function _fuCardHtml(u) {
+  const rows = u.stats.map(_fuStatRow).join("");
+  const bonus = u.bonus.length
+    ? `<div class="fu-section"><div class="fu-section-title">Bonus damage</div>
+         ${u.bonus.map(b => _fuRowHtml(
+           `<span class="fu-icon"></span><span class="fu-label">vs ${_esc(b.name)}</span>
+            <span class="fu-value">+${b.value}</span>`,
+           `base +${b.base}`, b.steps, "bonus")).join("")}</div>` : "";
+  const cost = u.cost && Object.keys(u.cost).length
+    ? `<div class="fu-cost">${Object.entries(u.cost).map(([r, a]) =>
+        `<span><img src="/static/icons/resources/${_FU_RES[r]}.png" alt="${_FU_RES[r]}">${a}</span>`).join("")}</div>` : "";
+  const train = (u.train || []).length
+    ? `<div class="fu-section"><div class="fu-section-title">${u.building ? "Built by" : "Trained at"}</div>
+        ${u.train.map(t => _fuRowHtml(
+          `<img class="fu-icon" src="/static/icons/properties/work_rate.png" alt="">
+           <span class="fu-label">${_esc(t.name)}</span>
+           <span class="fu-value">${_fuNum(t.effective)}s</span>`,
+          `${t.time}s${t.work_rate !== 1 ? ` ÷ ${_fuNum(t.work_rate, "speed")} work rate` : ""}`,
+          t.steps, "speed", true)).join("")}</div>` : "";
+  const unaffected = u.unaffected.length
+    ? `<div class="fu-section fu-unaffected">
+         <div class="fu-section-title">Doesn't change this unit</div>
+         <div class="fu-chips">${u.unaffected.map(n => `<span class="fu-chip">${_esc(n)}</span>`).join("")}</div>
+       </div>` : "";
+  const other = u.other.length
+    ? `<details class="fu-section fu-other"><summary class="fu-section-title">Other changes (${u.other.length})</summary>
+         <ol class="fu-steps">${u.other.map(s => `<li><span class="fu-step-amt">${_esc(s.stat)}</span> ${_esc(s.source)}</li>`).join("")}</ol>
+       </details>` : "";
+  return `<div class="fu-card-head">
+      <img src="${u.icon}" alt="" class="fu-portrait">
+      <div><div class="fu-name">${_esc(u.name)}</div>${cost}</div>
+    </div>
+    <div class="fu-section">${rows}</div>${bonus}${train}${unaffected}${other}`;
+}
+
+function _fuListHtml() {
+  const q = (_fu.query || "").trim().toLowerCase();
+  return _fu.data.groups.map(g => {
+    const units = g.units.filter(u => !q || u.name.toLowerCase().includes(q));
+    if (!units.length) return "";
+    return `<div class="fu-group"><div class="fu-group-title">${_esc(g.name)}</div>
+      ${units.map(u => `<button type="button" class="fu-unit${u.unit === _fu.selected ? " active" : ""}"
+          data-fu-unit="${u.unit}"><img src="${u.icon}" alt="" loading="lazy"><span>${_esc(u.name)}</span></button>`).join("")}
+    </div>`;
+  }).join("") || `<div class="small text-muted p-2">No unit matches “${_esc(q)}”.</div>`;
+}
+
+function _fuFind(id) {
+  for (const g of _fu.data.groups) for (const u of g.units) if (u.unit === id) return u;
+  return null;
+}
+
+function _fuRender() {
+  const body = document.getElementById("fu-stats-body");
+  if (!body || !_fu?.data) return;
+  const unit = _fuFind(_fu.selected);
+  const stale = _fu.snapshot !== JSON.stringify(draft);
+  body.innerHTML = `
+    ${stale ? `<div class="fu-stale small">Your civ has changed since this preview.
+      <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-fu-refresh>Refresh</button></div>` : ""}
+    <div class="fu-wrap">
+      <div class="fu-list">
+        <input type="search" class="form-control form-control-sm fu-search" placeholder="Find a unit…"
+               value="${_esc(_fu.query || "")}" aria-label="Find a unit">
+        <div class="fu-list-scroll">${_fuListHtml()}</div>
+      </div>
+      <div class="fu-card">${unit ? _fuCardHtml(unit) : `<div class="small text-muted">Pick a unit.</div>`}</div>
+    </div>
+    <div class="form-text mt-2">Not shown: auras, trickles, resource bonuses and effects the game
+      runs from script (e.g. Coiled Serpent Array), plus allies' team bonuses.</div>`;
+}
+
+async function renderFuStats() {
+  const body = document.getElementById("fu-stats-body");
+  const btn = document.getElementById("btn-fu-stats");
+  if (!body) return;
+  const req = ++_fuReq;
+  const snapshot = JSON.stringify(draft);
+  btn.disabled = true;
+  body.innerHTML = `<div class="text-muted small mt-3">
+    <span class="spinner-border spinner-border-sm me-2"></span>Building your civ and researching everything…</div>`;
+  let data;
+  try {
+    const r = await fetch("/api/builder/fu-stats", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: snapshot,
+    });
+    data = await r.json();
+  } catch (e) {
+    data = { status: "error", error: String(e) };
+  }
+  if (req !== _fuReq) return;
+  btn.disabled = false;
+  if (data.status !== "ok") {
+    const msg = data.status === "no_dat"
+      ? "Couldn't find your game's data file. Check the game folder in step 1."
+      : `Couldn't work out the stats: ${_esc(data.error || "unknown error")}`;
+    body.innerHTML = `<div class="alert alert-warning small mt-3 mb-0">${msg}</div>`;
+    return;
+  }
+  btn.innerHTML = `<i class="fa-solid fa-rotate me-1"></i>Refresh stats`;
+  const keep = _fu?.selected;
+  _fu = { data, snapshot, query: _fu?.query || "", selected: null };
+  const all = data.groups.flatMap(g => g.units);
+  _fu.selected = (all.find(u => u.unit === keep) || all.find(u => !u.building) || all[0])?.unit ?? null;
+  _fuRender();
+}
+
+document.addEventListener("click", e => {
+  if (e.target.closest("#btn-fu-stats") || e.target.closest("[data-fu-refresh]")) {
+    renderFuStats();
+    return;
+  }
+  const b = e.target.closest("[data-fu-unit]");
+  if (b && _fu) {
+    _fu.selected = parseInt(b.dataset.fuUnit, 10);
+    document.querySelectorAll(".fu-unit.active").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    const card = document.querySelector("#fu-stats-body .fu-card");
+    const u = _fuFind(_fu.selected);
+    if (card && u) card.innerHTML = _fuCardHtml(u);
+  }
+});
+
+document.addEventListener("input", e => {
+  if (!e.target.matches?.("#fu-stats-body .fu-search") || !_fu) return;
+  _fu.query = e.target.value;
+  const list = document.querySelector("#fu-stats-body .fu-list-scroll");
+  if (list) list.innerHTML = _fuListHtml();
+});
 
 // ── Button layout (step 9) ────────────────────────────────────────────────────
 // Where two of the civ's units share a training button, one keeps page 1 and

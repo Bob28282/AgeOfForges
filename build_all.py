@@ -33,9 +33,8 @@ import custom_bonus
 from voice_source import voice_clips
 from version import __version__ as _APP_VERSION
 from civ_schema import is_civbuilder_v1, is_empireforge, to_draft as _schema_to_draft
-from civ_overrides import (_apply_uu_overrides, _apply_hero_unit, _override_ut_costs,
-                           _refresh_uu_tooltips)
-from civ_appender import (apply_civ, assign_all_languages, patch_civilizations_list,
+from civ_overrides import apply_civ_with_overrides
+from civ_appender import (assign_all_languages, patch_civilizations_list,
     DLL_CREATION_OFFSET, DLL_HELP_OFFSET, DLL_TECH_TREE_OFFSET,
     get_civ_bonuses, get_team_bonuses, get_ut_entries, get_km_uu_index,
     team_card_texts, card_homes)
@@ -45,7 +44,7 @@ from build_civ import (
     _decode_flag,
     _find_civ_techtrees_folder,
     _patch_per_civ_techtree,
-    _canonical_techtree_id, _resolve_uu_info, uu_cost_text, keeps_vanilla_hover, renamed_uu_tooltip,
+    _canonical_techtree_id, uu_cost_text, keeps_vanilla_hover, renamed_uu_tooltip,
     civ_name_sid, civ_roster, rich_unit_tooltip, uu_owns_strings,
 )
 from civ_appender import _KM_UU_NAMES
@@ -633,7 +632,7 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
         print(f"\n  [{slot}] {replace_name!r} → {alias!r}  (string ID {name_sid})")
 
         # Apply civ to DAT (modifies dat in place).
-        civ_result = apply_civ(dat, civ_def, target_slot=slot)
+        civ_result, uu_info = apply_civ_with_overrides(dat, civ_def, slot)
         lang_assignments.append((civ_result["civ_index"], civ_result["lang_val"]))
 
         # Resolve UT names from bonus IDs.
@@ -673,15 +672,6 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
         castle_ut_help_sid = civ_result["castle_ut_help_sid"]
         imp_ut_help_sid    = civ_result["imp_ut_help_sid"]
 
-        # Resolve the custom UU info for description + string writes + techtree.
-        uu_info = _resolve_uu_info(civ_def, dat, slot, civ_result)
-
-        # civbuilder_v1 files carry UU stat overrides and advanced flags;
-        # KM-format files never have these keys, so this is always a no-op for them.
-        _override_ut_costs(dat, civ_result, civ_def)
-        _apply_uu_overrides(dat, slot, uu_info, civ_def)
-        _refresh_uu_tooltips(dat, slot, civ_result)
-        _apply_hero_unit(dat, slot, civ_def)
         hero_lines = hero_string_lines(dat, slot, civ_def.get("hero_unit"))
         civs_overrides[slot] = {
             "name_sid": name_sid,
@@ -710,7 +700,7 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
             "uu_desc_sid":   uu_info["dll_help"] if uu_info else None,
         }
         # Display name: prefer the resolved UU (vanilla or KM-custom, both
-        # handled by _resolve_uu_info above); fall back to the KM UU name
+        # handled by _resolve_uu_info in apply_civ_with_overrides); fall back to the KM UU name
         # table only for the two still-unimplemented custom indices (Monkey
         # Boy 47, Warrior Monk 75).
         # Read via the accessor, not bonuses[1][0]: line 460 above converts an

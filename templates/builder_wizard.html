@@ -966,6 +966,26 @@
     </div>
   </div>
 
+  {# Fully-upgraded stats — on demand only: it builds the civ to read them.
+     Filled by renderFuStats() from /api/builder/fu-stats (fu_stats.py). #}
+  <div class="card mb-3" id="fu-stats-card">
+    <div class="card-header">
+      <i class="fa-solid fa-chart-simple me-2"></i>Fully-Upgraded Stats
+    </div>
+    <div class="card-body">
+      <p class="small mb-3">
+        See each unit as it would be in a Post-Imperial game, with every
+        technology your civ can research, plus your bonuses and unique techs.
+        Check which bonuses really reach a unit before you build the mod.
+        It builds your civ to work this out, so it takes a few seconds.
+      </p>
+      <button type="button" class="btn btn-outline-primary" id="btn-fu-stats">
+        <i class="fa-solid fa-calculator me-1"></i>Preview stats
+      </button>
+      <div id="fu-stats-body"></div>
+    </div>
+  </div>
+
   {# Save #}
   <div class="card mb-3">
     <div class="card-header">

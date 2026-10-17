@@ -567,3 +567,25 @@ def _apply_hero_unit(dat, slot: int, draft: dict) -> None:
     if overrides.get("train_time") is not None and unit.creatable:
         if unit.creatable.train_locations:
             unit.creatable.train_locations[0].train_time = int(overrides["train_time"])
+
+
+# ── The whole DAT write for one civ ───────────────────────────────────────────
+
+def apply_civ_with_overrides(dat, civ_def: dict, slot: int,
+                             overrides: dict | None = None) -> tuple[dict, dict | None]:
+    """apply_civ plus every post-apply patch, in the order all three build
+    routes run them.  Returns (civ_result, uu_info).
+
+    overrides — the dict the UU/UT/hero patches read: the wizard passes its
+    draft, the other routes the civ_def itself (the default).  One function so
+    the stats preview (fu_stats) sees exactly the DAT a build writes."""
+    from civ_appender import apply_civ
+    from build_civ import _resolve_uu_info
+    overrides = civ_def if overrides is None else overrides
+    civ_result = apply_civ(dat, civ_def, target_slot=slot)
+    uu_info = _resolve_uu_info(civ_def, dat, slot, civ_result)
+    _override_ut_costs(dat, civ_result, overrides)
+    _apply_uu_overrides(dat, slot, uu_info, overrides)
+    _refresh_uu_tooltips(dat, slot, civ_result)
+    _apply_hero_unit(dat, slot, overrides)
+    return civ_result, uu_info

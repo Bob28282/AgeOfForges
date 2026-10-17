@@ -33,7 +33,7 @@ from build_civ import (
     _canonical_techtree_id,
     civ_name_sid,
     civ_roster,
-    _resolve_uu_info, keeps_vanilla_hover, rich_unit_tooltip, renamed_uu_tooltip, uu_owns_strings,
+    keeps_vanilla_hover, rich_unit_tooltip, renamed_uu_tooltip, uu_owns_strings,
     _patch_per_civ_techtree,
     _find_adjacent_json,
     _find_civ_techtrees_folder,
@@ -42,11 +42,10 @@ from build_civ import (
 )
 from civ_appender import (
     patch_civilizations_list,
-    apply_civ, assign_all_languages, get_civ_bonuses, get_team_bonuses, team_card_texts, card_homes,
+    assign_all_languages, get_civ_bonuses, get_team_bonuses, team_card_texts, card_homes,
     get_km_uu_index, _KM_UU_NAMES,
 )
-from civ_overrides import (_apply_uu_overrides, _apply_hero_unit, _override_ut_costs,
-                           _refresh_uu_tooltips)
+from civ_overrides import apply_civ_with_overrides
 from dat_reader import load_dat
 import custom_bonus
 
@@ -185,17 +184,9 @@ def build_wizard_mod(draft: dict, dat_path: str, replace_civ: str) -> bytes:
     name_sid    = civ_name_sid(ui_civ_name, dat_path, slot=slot) or 10271
 
     # ── Apply civ to DAT ────────────────────────────────────────────────────
-    civ_result = apply_civ(dat, civ_def, target_slot=slot)
-
-    # Override UT costs and research time from wizard values
-    _override_ut_costs(dat, civ_result, draft)
-
-    # Apply UU stat overrides and advanced flags before string building
-    uu_info = _resolve_uu_info(civ_def, dat, slot, civ_result)
+    # UT costs, UU stat overrides and the hero read the draft itself.
+    civ_result, uu_info = apply_civ_with_overrides(dat, civ_def, slot, draft)
     print(f"       UU overrides: uu_info={uu_info}", flush=True)
-    _apply_uu_overrides(dat, slot, uu_info, draft)
-    _refresh_uu_tooltips(dat, slot, civ_result)
-    _apply_hero_unit(dat, slot, draft)
 
     # ── Language (voice) assignment ─────────────────────────────────────────
     lang_val = civ_result["lang_val"]

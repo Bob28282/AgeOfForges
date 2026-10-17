@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import build_all                                            # noqa: E402
+import civ_appender                                         # noqa: E402
 from civ_appender import _add_auto_fire_tech, EC_RESOURCE   # noqa: E402
 from civ_schema import FORMAT_KEY                           # noqa: E402
 from dat_reader import find_game_dat                        # noqa: E402
@@ -45,7 +46,7 @@ PROBE_CIV = {
 # nothing but the probe moves gold.
 PROBE_CIV["tree"] = json.loads((ROOT / "uberdudes.civbuilder.json").read_text(encoding="utf-8"))["tree"]
 
-_real_apply_civ = build_all.apply_civ
+_real_apply_civ = civ_appender.apply_civ
 
 
 def _apply_civ_with_probe(dat, civ_def, target_slot, *args, **kwargs):
@@ -70,11 +71,11 @@ def main() -> None:
         cfg.write_text(json.dumps({"mod_name": "Trickle Probe", "prefix": "trickle_probe",
                                    "civs": [{"json": str(civ_file), "replace": "britons"}]}),
                        encoding="utf-8")
-        build_all.apply_civ = _apply_civ_with_probe
+        civ_appender.apply_civ = _apply_civ_with_probe
         try:
             build_all.build_mod(cfg, Path(dat_path), out)
         finally:
-            build_all.apply_civ = _real_apply_civ
+            civ_appender.apply_civ = _real_apply_civ
     print(f"\nWrote {out}")
 
 

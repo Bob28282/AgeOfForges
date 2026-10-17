@@ -41,12 +41,11 @@ from build_civ import (
     _decode_flag, _find_civ_techtrees_folder,
     _patch_per_civ_techtree, _canonical_techtree_id,
     civ_name_sid, civ_roster,
-    _resolve_uu_info, _find_adjacent_json, uu_cost_text, keeps_vanilla_hover, rich_unit_tooltip,
+    _find_adjacent_json, uu_cost_text, keeps_vanilla_hover, rich_unit_tooltip,
     renamed_uu_tooltip, uu_owns_strings,
 )
-from civ_overrides import (_apply_uu_overrides, _apply_hero_unit, _override_ut_costs,
-                           _refresh_uu_tooltips)
-from civ_appender import (apply_civ, assign_all_languages, button_layout_preview, patch_civilizations_list,
+from civ_overrides import apply_civ_with_overrides
+from civ_appender import (assign_all_languages, button_layout_preview, patch_civilizations_list,
                           _str_id, STRING_BASE, STRING_BLOCK_SIZE,
                           STR_CASTLE_UT, STR_IMPERIAL_UT,
                           DLL_CREATION_OFFSET, DLL_HELP_OFFSET, DLL_TECH_TREE_OFFSET,
@@ -765,15 +764,9 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
                                    f"→ replaces {replace}…")
             log_buf = _LiveLogWriter(job_id)
             with contextlib.redirect_stdout(log_buf):
-                result = apply_civ(dat, civ_def, target_slot=slot)
-                # Resolve UU info while still in the log context so any
-                # diagnostic prints go to the web build log, then apply
-                # civbuilder_v1-only overrides (UU stats, UT costs, hero unit).
-                uu_info_resolved = _resolve_uu_info(civ_def, dat, slot, result)
-                _override_ut_costs(dat, result, civ_def)
-                _apply_uu_overrides(dat, slot, uu_info_resolved, civ_def)
-                _refresh_uu_tooltips(dat, slot, result)
-                _apply_hero_unit(dat, slot, civ_def)
+                # Inside the log context so diagnostic prints reach the web
+                # build log; the overrides are civbuilder_v1-only no-ops for KM.
+                result, uu_info_resolved = apply_civ_with_overrides(dat, civ_def, slot)
             result["replace"] = replace
             result["log"]     = log_buf.getvalue()
             build_results.append(result)
@@ -2594,6 +2587,128 @@ def api_builder_button_layout():
                                     if item["kind"] == "unit"
                                     else _tech_icon(item["id"], item.get("upgrades_to"), dat))
     return jsonify({"status": "ok", "buildings": buildings})
+
+
+# Train buildings in tech-tree order; anything else falls in after them.
+_FU_GROUP_ORDER = (109, 12, 87, 101, 49, 82, 104, 45)
+
+
+@app.route("/api/builder/fu-stats", methods=["POST"])
+def api_builder_fu_stats():
+    """Fully-upgraded stats for every unit line of the draft (review step).
+
+    Builds the civ into a fresh copy of the DAT through the same
+    apply_civ_with_overrides the mod build uses, then simulates a post-Imperial
+    start (fu_stats).  On demand only: it costs a build, a few seconds."""
+    import traceback
+    draft = request.get_json(silent=True) or {}
+    dat_path = _resolve_dat_path(draft.get("dat_path"))
+    if not dat_path:
+        return jsonify({"status": "no_dat"})
+    try:
+        return jsonify({"status": "ok", **_fu_stats_preview(draft, dat_path)})
+    except Exception as e:                                   # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+def _fu_stats_preview(draft: dict, dat_path: str) -> dict:
+    import fu_stats
+    from bonus_names import bonus_name
+    from bonus_catalog import civ_bonus_techs
+    from build_all import _ut_name, _ut_source
+    from build_civ import _find_civ_slot
+    from civ_appender import _display_name, _hero_unit_id, get_civ_bonuses
+    from wizard_build import _draft_to_civ_def
+
+    civ_def = _draft_to_civ_def(draft)
+    dat = load_dat(dat_path)            # a fresh copy: the build mutates it
+    slot = _find_civ_slot(dat, "Goths")
+    with contextlib.redirect_stdout(io.StringIO()):
+        result, uu_info = apply_civ_with_overrides(dat, civ_def, slot, draft)
+    sim = fu_stats.Simulation(dat, slot)
+
+    # Where a change came from, in the player's words: card text for a civ
+    # bonus, the UT's name, else the game's name for the tech.
+    labels: dict[int, str] = {}
+    tech_map = result.get("bonus_tech_map") or {}
+    for bid, _mult in get_civ_bonuses(civ_def):
+        for vt in civ_bonus_techs(int(bid)):
+            if vt in tech_map:
+                labels[tech_map[vt]] = bonus_name(int(bid))
+    for key, group, tid in (("castle_ut", 2, result.get("castle_ut_tech_id")),
+                            ("imperial_ut", 3, result.get("imp_ut_tech_id"))):
+        if tid is not None:
+            own = ((draft.get(key) or {}).get("name") or "").strip()
+            labels[tid] = own or _ut_name(*_ut_source(civ_def, group)).split(" (")[0]
+
+    def tech_label(tid: int) -> str:
+        if tid in labels:
+            return labels[tid]
+        t = dat.techs[tid]
+        name = _display_name(t.language_dll_name, t.name) or t.name
+        return name.removeprefix("C-Bonus, ")
+
+    def name(change: dict) -> str:
+        return "Team bonus" if change["tech"] is None else tech_label(change["tech"])
+
+    def unit_name(uid: int) -> str:
+        if uu_info and uid in (uu_info.get("unit_id"), uu_info.get("elite_id")):
+            own = ((draft.get("unique_unit") or {}).get("name") or "").strip()
+            if own:
+                return ("Elite " + own) if uid == uu_info.get("elite_id") else own
+        u = dat.civs[slot].units[uid]
+        return _display_name(u.language_dll_name, u.name) or u.name
+
+    # What the built civ can actually make, not the draft's tree list (which
+    # carries every UU and other ids the editor never shows).  A unit with no
+    # in-game name (GUECHA_D0) isn't something a player meets.
+    # Our own UU's name lives in the string pool (and the draft), so it is
+    # always kept.
+    own_units = {uu_info.get("unit_id"), uu_info.get("elite_id")} if uu_info else set()
+    own_units.add(_hero_unit_id(civ_def))
+    lines = [b for b in sim.available_lines()
+             if b in own_units or sim.final_unit(b) in own_units
+             or _display_name(sim.units[sim.final_unit(b)].language_dll_name, None)]
+    cards = [fu_stats.card(sim, base, name) for base in lines]
+    own = {tid for tid in sim.techs if dat.techs[tid].civ == slot}
+    shaping = {s for c in cards for s in c["sources"]} & own
+    shaping |= {st["tech"] for c in cards for t in c.get("train", []) for st in t["steps"]
+                if st["tech"] in own}
+    groups: dict[str, list] = {}
+    for c in cards:
+        u = sim.units[c["unit"]]
+        trains = [t["building"] for t in c.get("train", [])]
+        group = (trains[0] if trains else None)
+        c["name"] = unit_name(c["unit"])
+        c["icon"] = _unit_icon([c["unit"], c["base_unit"]], dat)
+        # Buildings "train" at the Villager; a packed Trebuchet is type 80 too
+        # but trains at the Castle, so it groups with the units.
+        c["building"] = u.type == 80 and not (trains and sim.units[trains[0]] is not None
+                                              and sim.units[trains[0]].type == 80)
+        for t in c.get("train", []):
+            t["name"] = unit_name(t["building"])
+        for b in c["bonus"]:
+            b["name"] = _ATTACK_CLASS_NAMES.get(b["cls"])
+        c["bonus"] = [b for b in c["bonus"] if b["name"]]
+        # Perfusion changes the Barracks, not the unit, yet speeds its training.
+        touched = set(c["sources"]) | {st["tech"] for t in c.get("train", [])
+                                       for st in t["steps"] if st["tech"] is not None}
+        c["unaffected"] = sorted({tech_label(t) for t in shaping - touched})
+        key = "Buildings" if c["building"] else (unit_name(group) if group is not None else "Other")
+        c["_order"] = (_FU_GROUP_ORDER.index(group) if group in _FU_GROUP_ORDER
+                       else len(_FU_GROUP_ORDER) + (1 if c["building"] else 0))
+        groups.setdefault(key, []).append(c)
+    for k, v in groups.items():     # two Town Center ids (109, 621) read the same
+        seen: set[str] = set()
+        groups[k] = [c for c in v if not (c["name"] in seen or seen.add(c["name"]))]
+    out = [{"name": k, "units": sorted(v, key=lambda c: c["name"])}
+           for k, v in sorted(groups.items(), key=lambda kv: (kv[1][0]["_order"], kv[0]))]
+    for g in out:
+        for c in g["units"]:
+            c.pop("_order", None)
+    return {"civ": civ_def.get("alias") or "", "groups": out,
+            "warnings": result.get("warnings") or []}
 
 
 @app.route("/builder/build", methods=["POST"])

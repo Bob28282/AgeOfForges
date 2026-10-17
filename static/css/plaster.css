@@ -1916,6 +1916,84 @@ img.card-main-image {
   height: auto !important;
 }
 
+/* ── Fully-upgraded stats (wizard step 9, renderFuStats) ──────────────────── */
+/* Unit lines on the left, one stat card on the right; each changed stat     */
+/* opens into the techs that made it.  Stacks on narrow screens.             */
+.fu-stale {
+  margin-top: 0.75rem; padding: 0.4rem 0.6rem; border-radius: var(--r-sm);
+  background: rgba(184, 145, 26, 0.15); border: 1px solid var(--gold-light); color: var(--ink-mid);
+}
+.fu-wrap {
+  display: grid; grid-template-columns: minmax(180px, 230px) 1fr; gap: 1rem; margin-top: 0.75rem;
+}
+.fu-list { min-width: 0; }
+.fu-search { margin-bottom: 0.5rem; }
+.fu-list-scroll {
+  max-height: 520px; overflow-y: auto; border: 1px solid var(--parch-deep);
+  border-radius: var(--r-sm); background: var(--parch-light);
+}
+.fu-group-title {
+  position: sticky; top: 0; z-index: 1; padding: 0.3rem 0.6rem;
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-light); background: var(--parch-mid);
+}
+.fu-unit {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  padding: 0.25rem 0.6rem; border: 0; background: transparent; text-align: left;
+  font-size: 0.85rem; color: var(--ink);
+}
+.fu-unit img { width: 26px; height: 26px; border-radius: 3px; flex: none; }
+.fu-unit:hover { background: rgba(140, 32, 32, 0.06); }
+.fu-unit.active { background: rgba(140, 32, 32, 0.12); box-shadow: inset 3px 0 0 var(--crimson); }
+.fu-card {
+  min-width: 0; padding: 0.75rem 1rem; border: 1px solid var(--parch-deep);
+  border-radius: var(--r-md); background: var(--parch-light);
+}
+.fu-card-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+.fu-portrait { width: 52px; height: 52px; border-radius: var(--r-sm); border: 1px solid var(--border-dark); }
+.fu-name { font-family: 'Cinzel', serif; font-weight: 700; font-size: 1.1rem; color: var(--ink); }
+.fu-cost { display: flex; gap: 0.75rem; font-size: 0.85rem; color: var(--ink-mid); }
+.fu-cost span { display: inline-flex; align-items: center; gap: 0.2rem; }
+.fu-cost img { width: 16px; height: 16px; display: inline-block; }
+.fu-section { margin-top: 0.6rem; }
+.fu-section-title {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-light); margin-bottom: 0.2rem;
+}
+.fu-row { border-bottom: 1px solid var(--parch-mid); }
+.fu-row > summary, .fu-row-plain {
+  display: grid; grid-template-columns: 20px 1fr auto minmax(5.5rem, auto); align-items: center;
+  gap: 0.5rem; padding: 0.3rem 0.1rem; font-size: 0.9rem; color: var(--ink);
+}
+.fu-row > summary { cursor: pointer; list-style: none; }
+.fu-row > summary::-webkit-details-marker { display: none; }
+.fu-row > summary:hover { background: rgba(140, 32, 32, 0.05); }
+.fu-row[open] > summary .fu-base { color: var(--crimson); }
+.fu-icon { width: 18px; height: 18px; object-fit: contain; }
+.fu-kind { font-size: 0.75rem; color: var(--ash); }
+.fu-value { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.fu-base { font-size: 0.75rem; color: var(--ash); text-align: right; white-space: nowrap; }
+.fu-row-plain .fu-base { opacity: 0.7; }
+.fu-mixed { margin-left: 0.3rem; color: var(--gold); cursor: help; font-size: 0.8rem; }
+.fu-steps {
+  margin: 0 0 0.4rem 1.75rem; padding: 0; list-style: none; font-size: 0.82rem; color: var(--ink-mid);
+}
+.fu-steps li { padding: 0.08rem 0; }
+.fu-step-amt {
+  display: inline-block; min-width: 3.2rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--crimson);
+}
+.fu-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.fu-chip {
+  font-size: 0.78rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+  border: 1px dashed var(--border-dark); color: var(--ash);
+}
+.fu-other > summary { cursor: pointer; }
+@media (max-width: 767.98px) {
+  .fu-wrap { grid-template-columns: 1fr; }
+  .fu-list-scroll { max-height: 240px; }
+}
+
 /* ── Custom bonus library + wizard picker (custom_bonuses.js) ─────────────── */
 /* ── Custom bonuses drawn as bonus cards (custom_bonuses.js cbCardHtml) ── */
 .cb-card { cursor: pointer; }
