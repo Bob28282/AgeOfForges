@@ -1516,7 +1516,15 @@ def api_builder_techtree():
     td  = _load_techtree_data()
 
     if civ == "full":
-        # Return all IDs known across all civs combined
+        # Every id some civ has, with units kept to the nodes the editor
+        # draws.  The per-civ lists also hold units with no node (every UU, the
+        # Longship, ...), and a blank civ seeded with one could never untick
+        # it: the Longship rode into every new civ that way once Viking Sagas
+        # made it unlockable by any civ.  Buildings and techs stay as they
+        # were: the Fish Trap (199) has no node of its own, yet its presence
+        # is what keeps its make-avail tech (quirk 15).
+        from civ_appender import _editor_nodes
+        nodes = _editor_nodes()
         all_units = set()
         all_bldgs = set()
         all_techs = set()
@@ -1525,7 +1533,7 @@ def api_builder_techtree():
             all_bldgs.update(cv.get("Building", []))
             all_techs.update(cv.get("Tech", []))
         return jsonify({
-            "units":     sorted(all_units),
+            "units":     sorted(all_units & nodes["units"]),
             "buildings": sorted(all_bldgs),
             "techs":     sorted(all_techs),
         })
@@ -2591,6 +2599,9 @@ def api_builder_button_layout():
 
 # Train buildings in tech-tree order; anything else falls in after them.
 _FU_GROUP_ORDER = (109, 12, 87, 101, 49, 82, 104, 45)
+# Enabled for every civ but not a choice: the Rice Farm is the Farm's variant
+# for maps with lots of shallow water.
+_FU_HIDDEN = {1187}
 
 
 @app.route("/api/builder/fu-stats", methods=["POST"])
@@ -2667,9 +2678,9 @@ def _fu_stats_preview(draft: dict, dat_path: str) -> dict:
     # always kept.
     own_units = {uu_info.get("unit_id"), uu_info.get("elite_id")} if uu_info else set()
     own_units.add(_hero_unit_id(civ_def))
-    lines = [b for b in sim.available_lines()
-             if b in own_units or sim.final_unit(b) in own_units
-             or _display_name(sim.units[sim.final_unit(b)].language_dll_name, None)]
+    lines = [b for b in sim.available_lines() if sim.final_unit(b) not in _FU_HIDDEN
+             and (b in own_units or sim.final_unit(b) in own_units
+             or _display_name(sim.units[sim.final_unit(b)].language_dll_name, None))]
     cards = [fu_stats.card(sim, base, name) for base in lines]
     own = {tid for tid in sim.techs if dat.techs[tid].civ == slot}
     shaping = {s for c in cards for s in c["sources"]} & own

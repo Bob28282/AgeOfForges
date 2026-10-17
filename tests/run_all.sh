@@ -94,6 +94,7 @@ else
     run "custom bonus gating"     "$PY" tests/test_custom_bonus_when.py
     run "civ build order"         "$PY" tests/test_civ_build_order.py
     run "fully-upgraded stats"    "$PY" tests/test_fu_stats.py
+    run "blank-civ seed (python)" "$PY" tests/test_full_seed.py
     run "UT text, both routes"    "$PY" tests/test_ut_description_routes.py
 fi
 
