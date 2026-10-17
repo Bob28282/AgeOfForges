@@ -62,7 +62,7 @@ a = unit_id   b = -1   c = attribute_id   d = multiplier
 | 13  | ATTR_WORK_RATE     | Building/unit work rate multiplier |
 | 22  | ATTR_BLAST         | Blast/trample radius |
 | 24  | ATTR_BONUS_DMG_MOD | Incoming bonus damage multiplier |
-| 42  | ATTR_TRAIN_LOC     | Training building (Marauders — REPLACES primary slot) |
+| 42  | ATTR_TRAIN_LOC     | Training building of the train-location slot ATTR 158 selects (default slot 0, so on its own it REPLACES the primary) |
 | 57  | ATTR_DEAD_UNIT     | Unit spawned on death |
 | 59  | ATTR_MAX_CHARGE    | Charge attack energy pool |
 | 60  | ATTR_RECHARGE_RATE | Charge attack recharge rate |
@@ -75,7 +75,7 @@ a = unit_id   b = -1   c = attribute_id   d = multiplier
 | 109 | ATTR_REGEN_HP      | HP regeneration per minute |
 | 126 | ATTR_AVAIL_COUNT   | Available Unit Flag — how many may be trained (needs 127 = 2 or 4) |
 | 127 | ATTR_DISABLED_FLAG | Disabled Unit Flag — 1 disabled, 2 limited/no retrain, 4 limited/retrain on death |
-| 158 | ATTR_UI_REFRESH    | No-op toggle — pair with ATTR_TRAIN_LOC to force UI update |
+| 158 | ATTR_TRAIN_SLOT    | Which train-location slot a following ATTR 42 writes: set 1, write 42, set back to 0 — how Anarchy ADDS the Barracks (see advanced_techniques.md) |
 
 **Attack/armor encoding:** `d = float(class_id * 256 + amount)`. Use the armor class IDs below.
 

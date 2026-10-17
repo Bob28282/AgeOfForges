@@ -106,7 +106,7 @@ EffectCommand(type=EC_TYPE, a=unit_or_class, b=class_or_building, c=attribute, d
 | ATTR_WORK_RATE | 13 | Building/unit work rate multiplier |
 | ATTR_BLAST | 22 | Blast/trample radius |
 | ATTR_BONUS_DMG_MOD | 24 | Incoming bonus damage multiplier |
-| ATTR_TRAIN_LOC | 42 | Training building (Marauders mechanism — REPLACES) |
+| ATTR_TRAIN_LOC | 42 | Training building of the slot ATTR 158 selects (alone: REPLACES the primary) |
 | ATTR_DEAD_UNIT | 57 | Unit spawned on death |
 | ATTR_MAX_CHARGE | 59 | Charge attack max energy (Comitatenses) |
 | ATTR_RECHARGE_RATE | 60 | Charge attack recharge rate |
@@ -117,7 +117,7 @@ EffectCommand(type=EC_TYPE, a=unit_or_class, b=class_or_building, c=attribute, d
 | ATTR_EXTRA_PROJ_1 | 102 | Extra projectile count part 1 |
 | ATTR_EXTRA_PROJ_2 | 107 | Extra projectile count part 2 |
 | ATTR_REGEN_HP | 109 | HP regeneration per minute |
-| ATTR_UI_REFRESH | 158 | No-op toggle (pair with ATTR_TRAIN_LOC) |
+| ATTR_TRAIN_SLOT | 158 | Which train-location slot ATTR 42 writes (1 = the second slot; reset to 0) |
 
 **Encoding attack/armor values:**
 ```python
@@ -183,17 +183,19 @@ This works for civ bonuses (permanent). For tech-gated secondary buildings, use 
 
 ### Marauders Mechanism (Tech-Gated Training at New Building)
 
-ATTR_TRAIN_LOC **replaces** the primary training location — it does not add a secondary. To add a secondary building behind a tech:
+To add a secondary building behind a tech:
 
 ```python
 # In effect:
 EC_ENABLE(a=unit_id, b=1, c=-1, d=0.0)       # enable the unit
-EC_SET(a=unit_id, b=-1, c=ATTR_UI_REFRESH, d=1.0)
-EC_SET(a=unit_id, b=-1, c=ATTR_TRAIN_LOC, d=float(NEW_BUILDING_ID))
-EC_SET(a=unit_id, b=-1, c=ATTR_UI_REFRESH, d=0.0)
+EC_SET(a=unit_id, b=-1, c=ATTR_TRAIN_SLOT, d=1.0)   # c=158: write slot 1...
+EC_SET(a=unit_id, b=-1, c=ATTR_TRAIN_LOC, d=float(NEW_BUILDING_ID))   # c=42
+EC_SET(a=unit_id, b=-1, c=ATTR_TRAIN_SLOT, d=0.0)   # ...then back to slot 0
 ```
 
-This replaces the unit's training building in the UI, not adds to it. If the unit was at Castle and you do this, it moves to the new building. Use the DAT multi-building approach if you need both buildings simultaneously.
+Attribute 158 is not a UI refresh: it selects **which train-location slot** a following attribute 42 writes, and is set back to 0 afterwards. Slot 0 is the primary, so 42 on its own **replaces** the primary building. Anarchy (tech 16) is the vanilla template: `158=1`, `42=12`, `158=0` writes the Barracks into the Huskarl's second slot, a placeholder with `unit_id=-1` and its own button and hotkey. The Castle keeps training it, and the Barracks **adds** it (confirmed in game: Goth Huskarls train at both; inferred from the DAT, 2026-10-16).
+
+The second slot must exist. Without a placeholder at index 1 the engine falls back and the unit **moves** to the new building instead of being added. `civ_appender._ensure_anarchy_train_slot` inserts the placeholder for our UUs; index 2+ is ignored by this mechanism. `fu_stats.py` models it the same way.
 
 ### C-Bonus Age-Scaling Tech Pattern
 
@@ -339,9 +341,9 @@ When using the Anarchy/placeholder pattern (secondary slot with `unit_id=-1`, re
 
 ## Engine Quirks
 
-### ATTR_TRAIN_LOC Replaces, Not Adds
+### ATTR_TRAIN_LOC Writes the Slot ATTR 158 Selects
 
-`EC_SET c=42 d=building_id` **replaces** the unit's primary training building. If the unit was trainable at Castle and you do this with Barracks, it moves to Barracks only — it is not available at both. Use the DAT multi-training-location approach for permanent multi-building, or accept that the tech moves it.
+`EC_SET c=42 d=building_id` writes the training building of the train-location slot that attribute 158 currently selects. On its own (slot 0) it **replaces** the primary: a Castle unit moves to the Barracks. Wrapped in `158=1 … 158=0`, with a placeholder slot at index 1, it **adds** the building and the Castle keeps the unit. That is Anarchy, and Goth Huskarls train at both in game. See "Marauders Mechanism" above.
 
 ### Unit Array Length Must Be Uniform
 

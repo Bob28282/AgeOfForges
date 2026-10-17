@@ -184,16 +184,18 @@ Apply only to the specific civ's units array (each civ has its own).
 
 ## Marauders Mechanism (Tech-Gated Training at New Building)
 
-`ATTR_TRAIN_LOC = 42` **replaces** the primary training building — it does NOT add a secondary.
+`ATTR_TRAIN_LOC = 42` writes the training building of the train-location slot selected by attribute 158.
 
 ```python
 EC_ENABLE(a=unit_id, b=1)              # show the unit
-EC_SET(a=unit_id, c=ATTR_UI_REFRESH, d=1.0)   # c=158
+EC_SET(a=unit_id, c=ATTR_TRAIN_SLOT, d=1.0)   # c=158: select slot 1
 EC_SET(a=unit_id, c=ATTR_TRAIN_LOC, d=float(NEW_BUILDING_ID))  # c=42
-EC_SET(a=unit_id, c=ATTR_UI_REFRESH, d=0.0)
+EC_SET(a=unit_id, c=ATTR_TRAIN_SLOT, d=0.0)   # back to slot 0
 ```
 
-If the unit was at Castle and you do this with Barracks, it moves to Barracks only. Use the DAT multi-building approach if you need both simultaneously.
+Attribute 158 is not a UI refresh: it selects **which train-location slot** a following attribute 42 writes, and is set back to 0 afterwards. Slot 0 is the primary, so 42 on its own **replaces** the primary building. Anarchy (tech 16) is the vanilla template: `158=1`, `42=12`, `158=0` writes the Barracks into the Huskarl's second slot, a placeholder with `unit_id=-1` and its own button and hotkey. The Castle keeps training it, and the Barracks **adds** it (confirmed in game: Goth Huskarls train at both; inferred from the DAT, 2026-10-16).
+
+The second slot must exist. Without a placeholder at index 1 the engine falls back and the unit **moves** to the new building instead of being added. `civ_appender._ensure_anarchy_train_slot` inserts the placeholder for our UUs; index 2+ is ignored by this mechanism. `fu_stats.py` models it the same way.
 
 ---
 
