@@ -2545,6 +2545,29 @@ def _unit_icon(uids, dat=None) -> str:
     return url_for("static", filename="aoe2techtree/img/missing.png")
 
 
+def _building_icon(uids, dat=None) -> str:
+    """Best available art for a building.  A building's icon_id indexes the
+    BUILDING icon sheet, so _unit_icon would show whatever unit shares the
+    number; aoe2techtree keeps building art in img/Building/<picture index>
+    (equal to icon_id for every building checked), img/Buildings/<id> as a
+    fallback."""
+    uids = [uids] if isinstance(uids, int) else list(uids)
+    static = Path(app.static_folder)
+    units = dat.civs[1].units if dat is not None else []
+    for uid in uids:
+        unit = units[uid] if uid < len(units) else None
+        if unit is not None and unit.icon_id >= 0:
+            rel = f"aoe2techtree/img/Building/{unit.icon_id}.png"
+            if (static / rel).exists():
+                return url_for("static", filename=rel)
+    for uid in uids:
+        for ext in ("png", "jpg"):
+            rel = f"aoe2techtree/img/Buildings/{uid}.{ext}"
+            if (static / rel).exists():
+                return url_for("static", filename=rel)
+    return url_for("static", filename="aoe2techtree/img/missing.png")
+
+
 def _tech_icon(tid: int, upgrades_to: int | None, dat=None) -> str:
     """An upgrade shows the unit it produces; anything else its own tech icon."""
     if upgrades_to is not None:
@@ -2626,7 +2649,6 @@ def api_builder_fu_stats():
 def _fu_stats_preview(draft: dict, dat_path: str) -> dict:
     import fu_stats
     from bonus_names import bonus_name
-    from bonus_catalog import civ_bonus_techs
     from build_all import _ut_name, _ut_source
     from build_civ import _find_civ_slot
     from civ_appender import _display_name, _hero_unit_id, get_civ_bonuses
@@ -2641,12 +2663,10 @@ def _fu_stats_preview(draft: dict, dat_path: str) -> dict:
 
     # Where a change came from, in the player's words: card text for a civ
     # bonus, the UT's name, else the game's name for the tech.
-    labels: dict[int, str] = {}
-    tech_map = result.get("bonus_tech_map") or {}
-    for bid, _mult in get_civ_bonuses(civ_def):
-        for vt in civ_bonus_techs(int(bid)):
-            if vt in tech_map:
-                labels[tech_map[vt]] = bonus_name(int(bid))
+    br = result.get("bonus_results") or {}
+    labels: dict[int, str] = {tid: bonus_name(int(bid))
+                              for tid, bid in (br.get("tech_cards") or {}).items()}
+    labels.update(br.get("custom_labels") or {})
     for key, group, tid in (("castle_ut", 2, result.get("castle_ut_tech_id")),
                             ("imperial_ut", 3, result.get("imp_ut_tech_id"))):
         if tid is not None:
@@ -2692,11 +2712,12 @@ def _fu_stats_preview(draft: dict, dat_path: str) -> dict:
         trains = [t["building"] for t in c.get("train", [])]
         group = (trains[0] if trains else None)
         c["name"] = unit_name(c["unit"])
-        c["icon"] = _unit_icon([c["unit"], c["base_unit"]], dat)
+
         # Buildings "train" at the Villager; a packed Trebuchet is type 80 too
         # but trains at the Castle, so it groups with the units.
         c["building"] = u.type == 80 and not (trains and sim.units[trains[0]] is not None
                                               and sim.units[trains[0]].type == 80)
+        c["icon"] = (_building_icon if c["building"] else _unit_icon)([c["unit"], c["base_unit"]], dat)
         for t in c.get("train", []):
             t["name"] = unit_name(t["building"])
         for b in c["bonus"]:

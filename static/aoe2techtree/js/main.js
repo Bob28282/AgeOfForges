@@ -122,6 +122,13 @@ const _REGIONAL_GROUPS = [
         { name: "Eagle Warrior line",   ids: [751, 753, 752] },
         { name: "Varangian Guard line", ids: [2703, 2704] },
     ] },
+    // Dock button 8.  Viking Sagas made the Longship regional — the Vikings,
+    // Danes, Saxons and Varangians field it in place of the Demolition line —
+    // so it left the bonus cards (card 51, retired) for the tree.
+    { bldg: 45, lines: [
+        { name: "Demolition line", ids: [1104, 527, 528], standard: true },
+        { name: "Longship line",   ids: [250, 533] },
+    ] },
 ];
 
 // Derived rather than hand-listed: the two drifted apart once already, and a

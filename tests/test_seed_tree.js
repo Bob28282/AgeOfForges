@@ -116,10 +116,12 @@ console.log('\n=== A blank civ carries no regional unit line, or its techs ===')
   const seedTechs = new Set(seed.techs);
   for (const [uid, what] of [[2700, 'Mounted Crossbowman'], [2701, 'Heavy Mounted Crossbowman'],
                              [2703, 'Varangian Guard'], [2704, 'Elite Varangian Guard'],
-                             [873, 'Elephant Archer'], [751, 'Eagle Scout']]) {
+                             [873, 'Elephant Archer'], [751, 'Eagle Scout'],
+                             [250, 'Longship'], [533, 'Elite Longship']]) {
     check(`${what} (${uid}) is not seeded`, !seedUnits.has(uid));
   }
-  for (const [uid, what] of [[39, 'Cavalry Archer'], [1901, 'Fire Lancer']]) {
+  for (const [uid, what] of [[39, 'Cavalry Archer'], [1901, 'Fire Lancer'],
+                             [1104, 'Demolition Raft']]) {
     check(`${what} (${uid}) IS seeded — it is the standard side`, seedUnits.has(uid));
   }
   // Cranequins upgrades only the Mounted Crossbowman, which was just filtered

@@ -481,11 +481,13 @@
           null,
           null,
           null,
+          null,
           null
         ],
         [
           "Unit_13_45",
           "Unit_545_45",
+          null,
           null,
           null,
           null,
@@ -499,10 +501,12 @@
           "Unit_2626_45",
           "Unit_1104_45",
           "Unit_17_45",
+          null,
           null
         ],
         [
           "Tech_906_45",
+          null,
           null,
           null,
           null,
@@ -517,9 +521,11 @@
           "Unit_2627_45",
           "Unit_527_45",
           "Tech_34_45",
-          null
+          null,
+          "Unit_250_45"
         ],
         [
+          null,
           null,
           null,
           null,
@@ -535,9 +541,11 @@
           "Unit_2628_45",
           "Unit_528_45",
           "Tech_35_45",
-          null
+          null,
+          "Unit_533_45"
         ],
         [
+          null,
           null,
           null,
           null,
@@ -4894,6 +4902,44 @@
       "node_status": "ResearchedCompleted",
       "node_type": "RegionalUnit",
       "picture_index": 903,
+      "row": 6,
+      "use_type": "Unit"
+    },
+    {
+      "age_id": 3,
+      "building_id": 45,
+      "building_in_new_column": null,
+      "building_upgraded_from_id": null,
+      "grid": null,
+      "help_string_id": 105106,
+      "id": "Unit_250_45",
+      "link_id": null,
+      "link_node_type": "BuildingTech",
+      "name": "Longship",
+      "name_string_id": 14106,
+      "node_id": 250,
+      "node_status": "ResearchedCompleted",
+      "node_type": "RegionalUnit",
+      "picture_index": 40,
+      "row": 4,
+      "use_type": "Unit"
+    },
+    {
+      "age_id": 4,
+      "building_id": 45,
+      "building_in_new_column": null,
+      "building_upgraded_from_id": null,
+      "grid": null,
+      "help_string_id": 105457,
+      "id": "Unit_533_45",
+      "link_id": 250,
+      "link_node_type": "RegionalUnit",
+      "name": "Elite Longship",
+      "name_string_id": 14457,
+      "node_id": 533,
+      "node_status": "ResearchedCompleted",
+      "node_type": "RegionalUnit",
+      "picture_index": 474,
       "row": 6,
       "use_type": "Unit"
     }

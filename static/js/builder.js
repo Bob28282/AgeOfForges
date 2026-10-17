@@ -76,6 +76,20 @@ if ((draft._draftVer || 0) < 4) {
   draft._draftVer = 4;
   saveDraft();
 }
+// Card 51 (Longboats) retired into the tree: since Viking Sagas the Longship is
+// a regional Dock line, not a unique ship.  A draft that picked the card gets
+// the Longship line ticked instead, and no Demolition line, which is what the
+// card built.  Idempotent rather than version-gated, so it is safe for saved
+// files that come in through Edit Civ.  civ_appender derives the same thing at
+// build time for files that never pass through here.
+if ((draft.bonuses || []).some(b => Number(b.id ?? b[0]) === 51)) {
+  draft.bonuses = draft.bonuses.filter(b => Number(b.id ?? b[0]) !== 51);
+  draft.tree = draft.tree || { units: [], buildings: [], techs: [] };
+  const units = new Set((draft.tree.units || []).filter(id => ![1104, 527, 528].includes(id)));
+  units.add(250); units.add(533);
+  draft.tree.units = [...units];
+  saveDraft();
+}
 let currentStep = 1;
 let maxStep     = 1;  // highest step ever reached — gates nav dot clicks
 
@@ -4007,13 +4021,15 @@ function _applyLrsToUnits(units) {
 // Unique ship bonuses that lock the Demo Ship line.
 // Thirisadai (298) is excluded — it sits in dock position 15 (row 3, col 5),
 // well clear of the demo line (positions 8 and 13), so it can coexist.
-const _UNIQUE_SHIP_BONUS_IDS   = new Set([50, 51, 69]);
+// The Longship (card 51) is no longer one of them: it's a tree node now (see
+// the migration at the top of this file).
+const _UNIQUE_SHIP_BONUS_IDS   = new Set([50, 69]);
 const _DEMO_SHIP_UNITS         = new Set([1104, 527, 528]);
-const _UNIQUE_SHIP_BONUS_NAMES = { 50: "Turtle Ship", 51: "Longboat", 69: "Caravel" };
+const _UNIQUE_SHIP_BONUS_NAMES = { 50: "Turtle Ship", 69: "Caravel" };
 
-// Mutual-exclusivity group: only one of {50,51,69} may be selected at a time.
+// Mutual-exclusivity group: only one of {50,69} may be selected at a time.
 // Thirisadai (298) may coexist with one member of this group.
-const _EXCLUSIVE_SHIP_GROUP = new Set([50, 51, 69]);
+const _EXCLUSIVE_SHIP_GROUP = new Set([50, 69]);
 
 function showToast(message) {
   const body = document.getElementById("wizard-toast-body");

@@ -519,6 +519,8 @@
     "multiplier": false
   },
   "51": {
+    "type": "hidden",
+    "_note": "Retired 2026-10-16 into the tech tree: since Viking Sagas the Longship is a regional Dock line (Vikings, Danes, Saxons, Varangians), not a unique ship. civ_schema.RETIRED_INTO_TREE turns a saved civ that picked it into a tree with the Longship line and no Demolition line.",
     "heading": "UNLOCK",
     "stat": "Train Longboats at Docks",
     "entity": "longboat",

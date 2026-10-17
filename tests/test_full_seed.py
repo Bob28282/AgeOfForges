@@ -35,7 +35,10 @@ def check(label, cond, extra=""):
 seed = app.app.test_client().get("/api/builder/techtree?civ=full").get_json()
 hidden = sorted(set(seed["units"]) - _editor_nodes()["units"])
 check("every seeded unit is an editor node", not hidden, hidden)
-check("no Longship (250) or Elite Longship (533)", not {250, 533} & set(seed["units"]))
+# The Longship is an editor node now (Dock button 8, regional, card 51
+# retired), so it belongs in this union; the wizard's regional filter keeps it
+# off a blank civ (tests/test_seed_tree.js).
+check("the Longship line is an editor node", {250, 533} <= _editor_nodes()["units"])
 check("the Demolition line is seeded", {1104, 527, 528} <= set(seed["units"]))
 check("the Fish Trap (199) is still seeded", 199 in seed["buildings"])
 

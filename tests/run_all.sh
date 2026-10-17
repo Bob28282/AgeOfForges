@@ -95,6 +95,7 @@ else
     run "civ build order"         "$PY" tests/test_civ_build_order.py
     run "fully-upgraded stats"    "$PY" tests/test_fu_stats.py
     run "blank-civ seed (python)" "$PY" tests/test_full_seed.py
+    run "Longship in the tree"    "$PY" tests/test_longship_tree.py
     run "UT text, both routes"    "$PY" tests/test_ut_description_routes.py
 fi
 

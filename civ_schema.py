@@ -45,7 +45,19 @@ RETIRED_UU_FLAGS = frozenset({"ignore_armor"})
 #     card only ADDS attack; the Siege Tower has no range, projectile, reload or
 #     attack at all, so nothing ever fired (reported in-game).  Making it shoot
 #     means building a ranged attack from scratch — not done, so not offered.
-RETIRED_CIV_BONUSES = frozenset({333})
+#   51 "Train Longboats at Docks" — retired 2026-10-16 into the tech tree (see
+#     RETIRED_INTO_TREE): it still does what it says, but it has a better home.
+RETIRED_CIV_BONUSES = frozenset({333, 51})
+
+# Cards whose choice moved into the tech tree.  A civ that picked one reads as
+# if its tree held `add` and not `remove`, derived on every read (as the Unlock
+# cards are) so an old civ or a KM import keeps building what it built before.
+#   51 Longboats — since Viking Sagas the Longship is a regional Dock line
+#     (Vikings, Danes, Saxons, Varangians), sharing button 8 with the
+#     Demolition line it replaced on the card.
+RETIRED_INTO_TREE: dict[int, dict[str, frozenset]] = {
+    51: {"add": frozenset({250, 533}), "remove": frozenset({1104, 527, 528})},
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

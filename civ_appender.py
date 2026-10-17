@@ -13,7 +13,7 @@ from genieutils.civ import Civ
 from genieutils.effect import Effect, EffectCommand
 from genieutils.tech import Tech, ResearchLocation, ResearchResourceCost
 from genieutils.unit import TrainLocation, ResourceCost, ResourceStorage
-from civ_schema import RETIRED_CIV_BONUSES
+from civ_schema import RETIRED_CIV_BONUSES, RETIRED_INTO_TREE
 
 from bonus_catalog import civ_bonus_techs, team_bonus_tech, civ_bonus_ec_list, team_bonus_ec_list
 import km_custom_uu
@@ -1145,10 +1145,13 @@ def _apply_tree_wiring(dat: DatFile, civ_index: int, civ_def: dict,
         tree_units     = set(raw_tree[0] if len(raw_tree) > 0 and isinstance(raw_tree[0], list) else [])
         tree_buildings = set(raw_tree[1] if len(raw_tree) > 1 and isinstance(raw_tree[1], list) else [])
         tree_techs     = set(raw_tree[2] if len(raw_tree) > 2 and isinstance(raw_tree[2], list) else [])
-    tree_units = _apply_unit_replacements({int(u) for u in tree_units})
-
+    # No tree at all means "leave the civ's tree alone", so ask before any
+    # derivation: a retired card (Longboats) would otherwise make an empty
+    # tree look like one holding just the Longship, and the sweep would then
+    # disable everything else.
     if not tree_units and not tree_buildings and not tree_techs:
         return
+    tree_units = _apply_unit_replacements({int(u) for u in tree_units}, civ_def)
 
     # Unique buildings we cannot grant are dropped rather than half-honoured:
     # the DAT refuses them anyway, and leaving them in only lit the node up in
@@ -1181,8 +1184,9 @@ def _apply_tree_wiring(dat: DatFile, civ_index: int, civ_def: dict,
     for _lrs_uid in (420, 691, 2633, 1795, 1948):
         tree_units.discard(_lrs_uid)
 
-    # Demo ships are excluded when the civ has a unique ship bonus (50/51/69)
-    _UNIQUE_SHIP_BONUS_IDS = {50, 51, 69}
+    # Demo ships are excluded when the civ has a unique ship bonus (50/69).
+    # Longboats (51) left this group for the tree; see RETIRED_INTO_TREE.
+    _UNIQUE_SHIP_BONUS_IDS = {50, 69}
     _DEMO_SHIP_UNITS = {1104, 527, 528}
     _civ_bonus_ids_early = {e[0] for e in get_civ_bonuses(civ_def)}
     if _UNIQUE_SHIP_BONUS_IDS & _civ_bonus_ids_early:
@@ -2885,12 +2889,33 @@ _UNLOCK_UNIT_BONUSES: dict[int, dict] = {
 }
 
 
-def _apply_unit_replacements(units: set) -> set:
+# Tree units that may need their unlock techs copied (step 6b of apply_civ):
+# unit -> its make-avail tech and elite upgrade, in that order.
+_CIV_LOCKED_TREE_UNITS: dict[int, tuple[int, ...]] = {
+    250: (272, 372),        # Longship: Vikings-only before Viking Sagas
+}
+
+
+def _raw_civ_bonus_ids(civ_def: dict) -> set[int]:
+    """Civ bonus ids as saved, before get_civ_bonuses retires or derives any."""
+    raw = (civ_def or {}).get("bonuses") or []
+    if raw and isinstance(raw[0], dict):
+        return {int(e["id"]) for e in raw if isinstance(e, dict) and "id" in e}
+    if raw and isinstance(raw[0], list):
+        return {int(e[0]) for e in raw[0] if isinstance(e, (list, tuple)) and e}
+    return set()
+
+
+def _apply_unit_replacements(units: set, civ_def: dict | None = None) -> set:
     """Tree units after any picked replacement: a tree holding a unit whose
     unlock card "replaces" others (the Scythian Horse Archer replaces the
-    Cavalry Archer line) does not hold those others.  Every reader of tree
-    units goes through this, so the tree, the sweep and the F2 viewer agree."""
+    Cavalry Archer line) does not hold those others.  A card retired into the
+    tree (civ_schema.RETIRED_INTO_TREE, e.g. Longboats) adds its units here.
+    Every reader of tree units goes through this, so the tree, the sweep and
+    the F2 viewer agree."""
     out = set(units)
+    for bid in _raw_civ_bonus_ids(civ_def) & RETIRED_INTO_TREE.keys():
+        out = (out - RETIRED_INTO_TREE[bid]["remove"]) | RETIRED_INTO_TREE[bid]["add"]
     for spec in _UNLOCK_UNIT_BONUSES.values():
         if spec.get("replaces") and out & set(spec["units"]):
             out -= set(spec["replaces"])
@@ -3638,7 +3663,7 @@ def _custom_bonus_resolver(dat: DatFile, civ_index: int, civ_def: dict,
 
 def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
                           warnings: list[str], uu_ids: tuple[int, ...] = (),
-                          ut_ids: tuple = ()) -> int:
+                          ut_ids: tuple = (), labels: dict | None = None) -> int:
     """Build each custom bonus card as its own civ-owned auto-fire tech.
 
     Each card is its own tech (or several, if it outgrows one Effect), so the
@@ -3688,6 +3713,8 @@ def _apply_custom_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
             for start in range(0, len(cmds), CHUNK):
                 tid = _add_auto_fire_tech(dat, civ_index, cmds[start:start + CHUNK], reqs=tuple(reqs),
                                           name="C-Bonus, Custom")
+                if labels is not None:      # the card's text, for the stats preview
+                    labels[tid] = text
                 first = tid if first is None else first
                 n_techs += 1
             made.append(first)
@@ -5232,9 +5259,9 @@ def _tree_unit_ids(civ_def: dict) -> set[int]:
     """
     tree = civ_def.get("tree") or []
     if isinstance(tree, dict):
-        return _apply_unit_replacements({int(u) for u in (tree.get("units") or [])})
+        return _apply_unit_replacements({int(u) for u in (tree.get("units") or [])}, civ_def)
     if tree and isinstance(tree[0], (list, tuple)):
-        return _apply_unit_replacements({int(u) for u in tree[0]})
+        return _apply_unit_replacements({int(u) for u in tree[0]}, civ_def)
     return set()
 
 
@@ -5383,11 +5410,26 @@ def _apply_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
     # Maps a global tech ID to a civ-specific clone allocated by a bonus handler.
     # Passed to _allocate_tech so prerequisite chains on cloned techs stay intact.
     tech_remaps: dict[int, int] = {}
+    # Which card made each tech, for anything that reports back to the player
+    # (the stats preview).  Every handler only appends techs, so whatever
+    # appears while a card is being applied is that card's, however the
+    # handler built it (catalog copy, EC-list, bespoke).
+    tech_cards: dict[int, int] = {}
+    _card_open: tuple[int, int] | None = None     # (bonus id, tech count at its start)
+
+    def _close_card() -> None:
+        if _card_open is not None:
+            for t in range(_card_open[1], len(dat.techs)):
+                tech_cards.setdefault(t, _card_open[0])
+
     for entry in civ_bonuses:
+        _close_card()
+        _card_open = None
         if not isinstance(entry, (list, tuple)) or len(entry) < 1:
             continue
         bonus_id   = int(entry[0])
         multiplier = int(entry[1]) if len(entry) > 1 else 1
+        _card_open = (bonus_id, len(dat.techs))
 
         tech_ids = civ_bonus_techs(bonus_id)
         if tech_ids:
@@ -5503,6 +5545,8 @@ def _apply_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
         else:
             skipped.append(bonus_id)
 
+    _close_card()
+
     # Cross-bonus wiring, after every bonus has had its turn: 345 pays a free
     # Villager per eco upgrade, and 356 replaces three of those upgrades with
     # Pasture ones at fresh tech ids.  Neither branch can see the other while
@@ -5523,7 +5567,8 @@ def _apply_bonuses(dat: DatFile, civ_index: int, civ_def: dict,
           + ("…" if len(skipped) > 8 else ""))
 
     bonus_result = {"applied": applied, "skipped": skipped, "extra_tech_strings": extra_strings,
-                    "extra_unit_strings": extra_unit_strings, "bonus_tech_map": bonus_tech_map}
+                    "extra_unit_strings": extra_unit_strings, "bonus_tech_map": bonus_tech_map,
+                    "tech_cards": tech_cards}
 
     # ── Team bonus ────────────────────────────────────────────────────────────
     # Every picked team bonus is merged into ONE effect, so the per-entry command
@@ -6901,11 +6946,28 @@ def apply_civ(dat: DatFile, civ_def: dict, target_slot: int | None = None) -> di
     bonus_results["extra_unit_strings"].extend(km_uu_custom_unit_strings)
     bonus_results.setdefault("extra_tech_strings", []).extend(km_uu_extra_tech_strings)
 
+    # 6b. Tree units whose unlock techs are locked to another civ in THIS DAT.
+    #     A tree node only opts in (type=8), which can't reach a civ-gated tech
+    #     (quirk 9), so the techs are copied to the civ — what the retired card
+    #     did.  The Longship's are open to every civ since Viking Sagas, so on
+    #     current game data this does nothing; before it they were Vikings-only.
+    _tree_now = _tree_unit_ids(civ_def)
+    for _uid, _techs in _CIV_LOCKED_TREE_UNITS.items():
+        if _uid not in _tree_now or not any(dat.techs[t].civ not in (-1, civ_index) for t in _techs):
+            continue
+        _seen_locked: dict[int, int] = {}
+        for _t in _techs:
+            _copy = _allocate_tech(dat, _t, civ_index, _seen_locked)
+            if _copy >= 0:
+                _restore_elite_upgrade_location(dat, _copy, civ_index)
+        print(f"       Tree unit {_uid}: unlock techs {list(_techs)} are another civ's "
+              f"in this game version — copied to this civ")
+
     # 7a. Player-composed bonus cards — one auto-fire tech each — and the
     #     library cards picked as team bonuses or into a Custom UT.
     bonus_results["custom_applied"] = _apply_custom_bonuses(
         dat, civ_index, civ_def, warnings, (uu_id, elite_uu_id),
-        (castle_ut_tech_id, imp_ut_tech_id))
+        (castle_ut_tech_id, imp_ut_tech_id), bonus_results.setdefault("custom_labels", {}))
     bonus_results["placed_cards"] = _apply_placed_cards(
         dat, civ_index, civ_def, warnings, (uu_id, elite_uu_id),
         (castle_ut_tech_id, imp_ut_tech_id), tb_eff_id, _EFFECT_COMMAND_SOFT_LIMIT)

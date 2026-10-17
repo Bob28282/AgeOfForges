@@ -176,11 +176,20 @@ n = len(list(CIVDIR.glob("*.json")))
 check(f"{n} civ files x {len(combos)} combinations", not bad, "; ".join(bad[:6]))
 
 print("\n=== Regional unit node sources resolve ===")
+# Against the files a build reads: the player's own CivTechTrees beside the DAT
+# (wizard_build/_find_civ_techtrees_folder), not the pre-Viking-Sagas copy
+# bundled here, which has no Danes and still calls the Longship a UniqueUnit.
+try:
+    from dat_reader import find_civtechtrees, find_game_dat
+    SRCDIR = find_civtechtrees(find_game_dat()) or CIVDIR
+except Exception:                                            # noqa: BLE001
+    SRCDIR = CIVDIR
+print(f"  note  sources read from {SRCDIR}")
 bad = []
 for uid, sources in _OPT_IN_UNIT_NODE_SOURCES.items():
     found = False
     for fname in sources:
-        p = CIVDIR / fname
+        p = SRCDIR / fname
         if not p.exists():
             continue
         with open(p, encoding="utf-8") as f:

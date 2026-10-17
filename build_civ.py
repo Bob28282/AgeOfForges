@@ -86,7 +86,7 @@ def _tree_sets(civ_def: dict) -> tuple[set, set, set]:
     b -= UNSUPPORTED_UNIQUE_BUILDINGS
     # A replacement unit takes the replaced line out of the tree (Scythian Horse
     # Archer -> no Cavalry Archer line), the same rule apply_civ reads.
-    u = _apply_unit_replacements({int(x) for x in u})
+    u = _apply_unit_replacements({int(x) for x in u}, civ_def)
     # The Huns bonus hides the House in the DAT whatever the tree says, so the
     # viewer should not draw one either (issue #40).
     if any(e[0] == 131 for e in get_civ_bonuses(civ_def)):
@@ -562,6 +562,8 @@ _OPT_IN_UNIT_NODE_SOURCES: dict[int, list[str]] = {
     2588: ["INCAS.json",       "MAPUCHE.json"],    # Champi Runner
     2633: ["AZTECS.json",      "INCAS.json"],      # Catapult Galleon
     1302: ["CHINESE.json"],                 # Dragon Ship
+    250:  ["VIKINGS.json",     "DANES.json"],      # Longship (regional since Viking Sagas)
+    533:  ["VIKINGS.json",     "DANES.json"],      # Elite Longship
     2110: ["ATHENIANS.json",   "SPARTANS.json"],   # Hoplite (Chronicles)
     2111: ["ATHENIANS.json",   "SPARTANS.json"],   # Elite Hoplite
 }
