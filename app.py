@@ -30,7 +30,7 @@ from flask import (Flask, flash, jsonify, redirect, render_template,
 from bonus_names import bonus_name, skip_reason
 import custom_bonus
 from voice_source import voice_values
-from build_all import (_build_combined_data_zip, _build_combined_ui_zip,
+from build_all import (_build_combined_data_zip, _build_combined_ui_zip, dat_json_files,
                        _ut_name, _ut_source, _BONUS_NAMES, _TEAM_BONUS_NAMES,
                        _UNIQUE_CASTLE_STRINGS, _UNIQUE_IMP_STRINGS,
                        _kv_text, ut_name_and_desc, ut_selection_text, ut_research_label,
@@ -45,7 +45,7 @@ from build_civ import (
     renamed_uu_tooltip, uu_owns_strings,
 )
 from civ_overrides import apply_civ_with_overrides
-from civ_appender import (assign_all_languages, button_layout_preview, patch_civilizations_list,
+from civ_appender import (assign_all_languages, button_layout_preview,
                           _str_id, STRING_BASE, STRING_BLOCK_SIZE,
                           STR_CASTLE_UT, STR_IMPERIAL_UT,
                           DLL_CREATION_OFFSET, DLL_HELP_OFFSET, DLL_TECH_TREE_OFFSET,
@@ -1098,20 +1098,8 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
         # replaced civs. Required since the 2026-06-06 patch — AoE2 DE now
         # validates this file's entry count against the DAT civ count and
         # silently drops modded-strings civ-picker overrides without it.
-        civs_json_bytes: bytes | None = None
-        base_civs_json = _find_adjacent_json(dat_path_obj, "civilizations.json")
-        if base_civs_json is None or not base_civs_json.exists():
-            base_civs_json = Path(__file__).parent / "civilizations.json"
-        if base_civs_json.exists() and civs_overrides:
-            try:
-                with open(base_civs_json, encoding="utf-8") as f:
-                    civ_list = json.load(f).get("civilization_list", [])
-                patch_civilizations_list(civ_list, civs_overrides)
-                civs_json_bytes = json.dumps(
-                    {"civilization_list": civ_list}, separators=(",", ":")
-                ).encode("utf-8")
-            except Exception as e:
-                print(f"WARNING: Could not generate civilizations.json: {e}")
+        # unitlines.json too (dat_json_files: one function for all three routes).
+        dat_jsons = dat_json_files(dat_path_obj, civs_overrides)
 
         # Batch language/voice assignment using KM's 3-phase algorithm.
         lang_assignments = [(r["civ_index"], r["lang_val"]) for r in build_results]
@@ -1128,7 +1116,7 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
         # exe discards).
         with contextlib.redirect_stdout(log_buf):
             data_zip = _build_combined_data_zip(dat, button_pngs, per_civ_tt, mod_name=mod_name,
-                                                civs_json_bytes=civs_json_bytes)
+                                                dat_jsons=dat_jsons)
             ui_zip   = _build_combined_ui_zip(ai_stubs, button_pngs, combined_strings,
                                               mod_name=mod_name,
                                               lang_values=unique_lang_values,

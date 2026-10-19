@@ -96,6 +96,7 @@ else
     run "fully-upgraded stats"    "$PY" tests/test_fu_stats.py
     run "blank-civ seed (python)" "$PY" tests/test_full_seed.py
     run "Longship in the tree"    "$PY" tests/test_longship_tree.py
+    run "AI unique unit lines"    "$PY" tests/test_unit_lines.py
     run "UT text, both routes"    "$PY" tests/test_ut_description_routes.py
 fi
 

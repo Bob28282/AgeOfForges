@@ -14,7 +14,7 @@ from pathlib import Path
 from build_all import (
     _kv_text, hero_string_lines,
     ut_name_and_desc, ut_selection_text, ut_research_label,
-    _build_combined_data_zip,
+    _build_combined_data_zip, dat_json_files,
     _build_combined_ui_zip,
     _ut_name,
     _BONUS_NAMES,
@@ -35,13 +35,11 @@ from build_civ import (
     civ_roster,
     keeps_vanilla_hover, rich_unit_tooltip, renamed_uu_tooltip, uu_owns_strings,
     _patch_per_civ_techtree,
-    _find_adjacent_json,
     _find_civ_techtrees_folder,
     _decode_flag,
     uu_cost_text,
 )
 from civ_appender import (
-    patch_civilizations_list,
     assign_all_languages, get_civ_bonuses, get_team_bonuses, team_card_texts, card_homes,
     get_km_uu_index, _KM_UU_NAMES,
 )
@@ -166,10 +164,6 @@ def build_wizard_mod(draft: dict, dat_path: str, replace_civ: str) -> bytes:
 
     dat_path_obj = Path(dat_path)
     ct_folder    = _find_civ_techtrees_folder(dat_path_obj)
-
-    base_civs_json = _find_adjacent_json(dat_path_obj, "civilizations.json")
-    if base_civs_json is None or not base_civs_json.exists():
-        base_civs_json = Path(__file__).parent / "civilizations.json"
 
     dat = load_dat(dat_path)
 
@@ -527,23 +521,13 @@ def build_wizard_mod(draft: dict, dat_path: str, replace_civ: str) -> bytes:
             if json_file.name not in per_civ_tt:
                 per_civ_tt[json_file.name] = json_file.read_bytes()
 
-    # ── civilizations.json patch ─────────────────────────────────────────────
-    civs_json_bytes: bytes | None = None
-    if base_civs_json and base_civs_json.exists() and civs_overrides:
-        try:
-            with open(base_civs_json, encoding="utf-8") as f:
-                civ_list = json.load(f).get("civilization_list", [])
-            patch_civilizations_list(civ_list, civs_overrides)
-            civs_json_bytes = json.dumps(
-                {"civilization_list": civ_list}, separators=(",", ":")
-            ).encode("utf-8")
-        except Exception as exc:
-            print(f"  WARNING: Could not patch civilizations.json: {exc}")
+    # ── civilizations.json + unitlines.json ─────────────────────────────────
+    dat_jsons = dat_json_files(dat_path, civs_overrides)
 
     # ── Package ──────────────────────────────────────────────────────────────
     data_zip = _build_combined_data_zip(
         dat, button_pngs, per_civ_tt,
-        mod_name=mod_name, civs_json_bytes=civs_json_bytes,
+        mod_name=mod_name, dat_jsons=dat_jsons,
     )
     ui_zip = _build_combined_ui_zip(
         ai_stubs, button_pngs, combined_strings,

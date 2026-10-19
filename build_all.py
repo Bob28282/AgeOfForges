@@ -353,11 +353,56 @@ def _ut_source(civ_def: dict, group: int) -> tuple[int | None, bool]:
     return int(entries[0][0]), entries[0][2] == "castle"
 
 
+def dat_json_files(dat_path, civs_overrides: dict) -> dict[str, bytes]:
+    """The game's own JSON files the data mod overrides, patched for the
+    replaced civs: civilizations.json and unitlines.json, keyed by file name.
+    One function for all three build routes (they each carried a copy of
+    the civilizations.json half).
+
+    Both are read from beside the player's DAT.  civilizations.json falls
+    back to our bundled copy, as it always has.  unitlines.json has no copy
+    here: without the player's, the civ keeps the replaced civ's unique unit
+    line (the AI then can't find a custom UU — see patch_unitlines)."""
+    from build_civ import _find_adjacent_json
+    from civ_appender import patch_unitlines
+    out: dict[str, bytes] = {}
+    if not civs_overrides:
+        return out
+    dat_path = Path(dat_path)
+    base_civs = _find_adjacent_json(dat_path, "civilizations.json")
+    if base_civs is None or not base_civs.exists():
+        base_civs = Path(__file__).parent / "civilizations.json"
+    if not base_civs.exists():
+        return out
+    try:
+        civ_list = json.loads(base_civs.read_text(encoding="utf-8")).get("civilization_list", [])
+        patch_civilizations_list(civ_list, civs_overrides)
+    except Exception as e:                                   # noqa: BLE001
+        print(f"  WARNING: Could not generate civilizations.json: {e}")
+        return out
+    lines_path = _find_adjacent_json(dat_path, "unitlines.json")
+    if lines_path is not None and lines_path.exists():
+        try:
+            lines_doc = json.loads(lines_path.read_text(encoding="utf-8"))
+            added = patch_unitlines(lines_doc.setdefault("UnitLines", []), civ_list, civs_overrides)
+            if added:
+                out["unitlines.json"] = json.dumps(lines_doc, indent=2, ensure_ascii=False).encode("utf-8")
+                print(f"  unitlines.json: a unique-unit line for slot(s) {added}")
+        except Exception as e:                               # noqa: BLE001
+            print(f"  WARNING: Could not patch unitlines.json: {e}")
+    else:
+        print("  NOTE: no unitlines.json beside the DAT; a custom unique unit keeps the replaced "
+              "civ's unit line, so the AI may not train it")
+    out["civilizations.json"] = json.dumps({"civilization_list": civ_list},
+                                           separators=(",", ":")).encode("utf-8")
+    return out
+
+
 def _build_combined_data_zip(dat,
                               button_pngs: dict[str, bytes],
                               per_civ_tt: dict[str, bytes],
                               mod_name: str = "Custom Civs",
-                              civs_json_bytes: bytes | None = None) -> bytes:
+                              dat_jsons: dict[str, bytes] | None = None) -> bytes:
     """Serialize the modified DAT + all supporting data-side assets.
 
     Ships the game's default 60-entry civilizations.json so the civ picker
@@ -390,8 +435,8 @@ def _build_combined_data_zip(dat,
         # again costs ~1s for no size gain: store it as is.
         zf.writestr("resources/_common/dat/empires2_x2_p1.dat", dat_bytes,
                     compress_type=zipfile.ZIP_STORED)
-        if civs_json_bytes is not None:
-            zf.writestr("resources/_common/dat/civilizations.json", civs_json_bytes)
+        for name, data in (dat_jsons or {}).items():     # civilizations.json, unitlines.json
+            zf.writestr(f"resources/_common/dat/{name}", data)
         if futura_bytes is not None:
             zf.writestr("resources/_common/dat/futuravailableunits.json",
                         futura_bytes)
@@ -551,12 +596,6 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
           f"{info['num_techs']} techs, {info['num_effects']} effects")
 
     ct_folder = _find_civ_techtrees_folder(dat_path)
-
-    # Locate base civilizations.json next to the DAT (or fall back to project root).
-    from build_civ import _find_adjacent_json
-    base_civs_json = _find_adjacent_json(dat_path, "civilizations.json")
-    if base_civs_json is None or not base_civs_json.exists():
-        base_civs_json = Path(__file__).parent / "civilizations.json"
 
     # Accumulated UI assets across all civs.
     ai_stubs:   dict[str, bytes] = {}
@@ -1041,18 +1080,8 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
         if lines
     }
 
-    # Generate civilizations.json with updated UU icon paths for replaced civs.
-    civs_json_bytes: bytes | None = None
-    if base_civs_json and base_civs_json.exists() and civs_overrides:
-        try:
-            with open(base_civs_json, encoding="utf-8") as f:
-                civ_list = json.load(f).get("civilization_list", [])
-            patch_civilizations_list(civ_list, civs_overrides)
-            civs_json_bytes = json.dumps(
-                {"civilization_list": civ_list}, separators=(",", ":")
-            ).encode("utf-8")
-        except Exception as e:
-            print(f"  WARNING: Could not generate civilizations.json: {e}")
+    # civilizations.json and unitlines.json, patched for the replaced civs.
+    dat_jsons = dat_json_files(dat_path, civs_overrides)
 
     # Batch language/voice assignment using KM's 3-phase algorithm.
     print("\nAssigning languages (KM 3-phase)…")
@@ -1061,7 +1090,7 @@ def build_mod(config_path: Path, dat_path: Path, out_path: Path) -> None:
     print(f"\nBuilding combined mod zip → {out_path}")
     prefix = config.get("prefix", mod_name.lower().replace(" ", "_"))
     data_zip = _build_combined_data_zip(dat, button_pngs, per_civ_tt, mod_name=mod_name,
-                                         civs_json_bytes=civs_json_bytes)
+                                         dat_jsons=dat_jsons)
     unique_lang_values = {lang_val for _, lang_val in lang_assignments}
     ui_zip   = _build_combined_ui_zip(ai_stubs, button_pngs, combined_strings, mod_name=mod_name,
                                       lang_values=unique_lang_values, dat_path=dat_path)

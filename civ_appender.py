@@ -970,6 +970,48 @@ def patch_civilizations_list(civ_list: list[dict], civs_overrides: dict) -> None
             ]
 
 
+# unitlines.json says LineIDs "have to be between (-400, -199)".
+_UNIT_LINE_RANGE = range(-399, -199)
+
+
+def patch_unitlines(unit_lines: list[dict], civ_list: list[dict], civs_overrides: dict) -> list[int]:
+    """Point each replaced civ's `unique_unit_line` at a line holding its UU,
+    adding a line to `unit_lines` (unitlines.json's "UnitLines") when no line
+    does.  Returns the slots that got a new line.
+
+    The AI addresses a civ's unique unit by line (`my-unique-unit-line`), and
+    a UU that is no vanilla civ's own (a KM-custom one) kept the replaced
+    civ's line: an Amazon Archer civ over the Goths still named the Huskarl
+    line, and its AI acknowledged "train unique units" and never did, while
+    the same order to a civ with a vanilla UU (Mangudai) worked (in game,
+    2026-10-19).  Run after patch_civilizations_list; it reads that entry's
+    UU ids."""
+    used = {int(l.get("LineID", 0)) for l in unit_lines}
+    free = [i for i in _UNIT_LINE_RANGE if i not in used]
+    added: list[int] = []
+    for slot_idx in sorted(civs_overrides):
+        ov = civs_overrides[slot_idx]
+        uu = ov.get("uu_unit_id")
+        if uu is None or slot_idx >= len(civ_list):
+            continue
+        existing = next((l for l in unit_lines if uu in (l.get("IDChain") or [])), None)
+        if existing is not None:
+            civ_list[slot_idx]["unique_unit_line"] = existing["LineID"]
+            continue
+        if not free:
+            print(f"  WARNING: unitlines.json has no free LineID left; slot {slot_idx}'s "
+                  "unique unit keeps the replaced civ's line")
+            continue
+        line_id = free.pop(0)
+        chain = [uu] + ([ov["uu_elite_id"]] if ov.get("uu_elite_id") is not None else [])
+        unit_lines.append({"Name": f"Empire Forge Unique Unit Line (slot {slot_idx})",
+                           "Identifier": f"empire-forge-slot-{slot_idx}-unique-line",
+                           "LineID": line_id, "IDChain": chain})
+        civ_list[slot_idx]["unique_unit_line"] = line_id
+        added.append(slot_idx)
+    return added
+
+
 def _team_revived_techs(dat: DatFile) -> set[int]:
     """Techs a team bonus re-enables by disabling the tech that disables them.
 
