@@ -2044,6 +2044,10 @@ img.card-main-image {
 .cb-card-move { margin-top: .15rem; }
 .cb-card-move .btn { font-size: .72rem; padding: .1rem .55rem; }
 .cb-card .btn-link { font-size: .72rem; padding: 0 .25rem; }
+.cb-card .btn-link {--bs-btn-color: var(--crimson)}
+.cb-card .btn-link:hover {
+    color: var(--crimson-dark);
+}
 .cb-card-actions { display: flex; justify-content: center; gap: .15rem; margin-top: .1rem; }
 /* Download / edit / delete: muted ink at rest, a parchment well on hover —
    gold for the harmless two, crimson for delete (and its armed "Delete?"). */
