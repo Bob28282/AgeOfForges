@@ -693,6 +693,7 @@ def build_progress():
         session["results_path"] = job.get("results_path")
         session["out_file"]     = job.get("out_file")
         session["out_name"]     = job.get("out_name")
+        session["mod_name"]     = job.get("mod_name")    # the lobby lists the data mod by it
 
     return jsonify(payload)
 
@@ -1151,7 +1152,7 @@ def _run_build_job(job_id, sd, dat_path, civs_meta, ordered, replace_map, mod_na
         out_name = f"{prefix}.zip"
         _progress_push(job_id, f"Done — {out_name} ready to download.")
         _progress_finish(job_id, results_path=str(results_path),
-                         out_file=str(out_path), out_name=out_name)
+                         out_file=str(out_path), out_name=out_name, mod_name=mod_name)
     except Exception as e:
         import traceback
         traceback.print_exc()  # still goes to the real console for debugging
@@ -1170,6 +1171,7 @@ def results():
     out_name      = session.get("out_name", "mod.zip")
     return render_template("results.html", results=build_results,
                            has_download=has_download, out_name=out_name,
+                           mod_name=session.get("mod_name") or out_name.removesuffix(".zip"),
                            bonus_name=bonus_name, skip_reason=skip_reason)
 
 

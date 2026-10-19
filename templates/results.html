@@ -119,6 +119,15 @@
   </a>
 </div>
 
+{# The step players miss: a data mod is not applied by being installed.  Two
+   reports from one player (#66, 2026-10-19) were exactly this. #}
+<div class="alert alert-info mt-3 mb-0" role="note">
+  <i class="fa-solid fa-flag-checkered me-1"></i>
+  <strong>Before every game:</strong> in the game setup screen, set <strong>Data Mod</strong> to
+  <strong>{{ mod_name }}</strong>. Installing the mod isn't enough: without this step the game
+  plays the civ you replaced, with its buildings, voices and tech tree.
+</div>
+
 <div class="card mt-4">
   <div class="card-header">
     <strong>Installation Instructions</strong>
@@ -137,14 +146,19 @@
       </li>
       <li class="mb-1">Unzip both of these to your local mods folder - usually located in <code>C:\Users\yourname\Games\Age of Empires 2 DE\12345678\mods\local</code>, where '12345678' is the folder for profile. You may have to test. <br/>
         <strong>Pro Tip:</strong> Create a shortcut for this folder and pin it to your File Explorer sidebar</li>
-      <li class="mb-1">Make sure <strong>both</strong> mods show a green checkmark (active) before launching a game.</li>
+      <li class="mb-1">In the game's <strong>Mods → Installed</strong> list, make sure <strong>both</strong>
+        mods show a green checkmark (active). Turn off any other mod that changes game data, such as
+        another civ or balance mod: a game uses only one data mod.</li>
+      <li class="mb-1"><strong>For every game,</strong> set <strong>Data Mod</strong> to
+        <strong>{{ mod_name }}</strong> in the game setup screen. In multiplayer the host picks it.</li>
     </ol>
     <div class="alert alert-warning py-2 small mb-0">
-      If only the data mod is active, your civs will play correctly but show their old vanilla names
-      and icons in the selection screen. Both mods must be active together.<br>
-      And the reverse: if the selection screen shows your bonuses but the game plays the original civ
-      (its buildings, voices, tech tree and unique unit), the data mod isn't selected for that game.
-      Choose it in the lobby's <em>Data Mod</em> dropdown; in multiplayer the host picks it.
+      <strong>If something looks wrong:</strong><br>
+      Your civ shows its bonuses in the selection screen, but the game plays the original civ (its
+      buildings, voices, tech tree and unique unit)? The data mod isn't in use: check step 4, and that
+      no other data mod is active.<br>
+      Your civ plays correctly but shows the old name and icons? The UI mod isn't active (step 3), or
+      another UI mod has a higher priority.
     </div>
   </div>
 </div>
