@@ -18,11 +18,21 @@ RELEASES_URL = f"https://github.com/{REPO}/releases/latest"
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
+    """Comparable version: "2.6.2" -> (2, 6, 2, 1, 0).  A pre-release sorts
+    BELOW its release ("2.6.2-preview.1" -> (2, 6, 2, 0, 1)), so a preview
+    build is still offered the real 2.6.2 when it ships.  Read digit by digit,
+    "2-preview" used to become 2 and the suffix an extra part, which ranked
+    the preview above the release."""
+    main, _, pre = v.lstrip("vV").partition("-")
     parts = []
-    for p in v.lstrip("vV").split("."):
+    for p in main.split("."):
         digits = "".join(c for c in p if c.isdigit())
         parts.append(int(digits) if digits else 0)
-    return tuple(parts)
+    parts += [0] * (3 - len(parts))                     # "2.6" == "2.6.0"
+    if not pre:
+        return tuple(parts) + (1, 0)
+    digits = "".join(c for c in pre if c.isdigit())
+    return tuple(parts) + (0, int(digits) if digits else 0)
 
 
 def running_from_store() -> bool:

@@ -97,6 +97,7 @@ else
     run "blank-civ seed (python)" "$PY" tests/test_full_seed.py
     run "Longship in the tree"    "$PY" tests/test_longship_tree.py
     run "AI unique unit lines"    "$PY" tests/test_unit_lines.py
+    run "update check order"      "$PY" tests/test_update_check.py
     run "UT text, both routes"    "$PY" tests/test_ut_description_routes.py
 fi
 
