@@ -201,9 +201,6 @@ def _run_update_check():
 # the one-time "what's new" modal. Add the newest version at the top.
 CHANGELOG: dict[str, list[str]] = {
     "2.6.2": [
-        "<strong class=\"color-accent-2\">NEW:</strong> <strong>The Fortified Outpost</strong> has its own tile on the custom bonus Buildings tab, and belongs to Defensive buildings. Outposts become Fortified Outposts through the Macedonian team bonus",
-        "<strong class=\"color-accent-2\">NEW:</strong> After building a mod, the results page says plainly to <strong>set Data Mod to your mod in the game setup screen</strong> before every game, and how to tell if it isn't in use. It also points to the new extend your mod guide",
-        "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>Unreadable bonus cards in a forced dark mode.</strong> Browsers set to darken every page (such as Brave's Night mode) made the card text unreadable. Empire Forge now asks them to leave its pages as designed",
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>Fully-upgraded stats.</strong> On the Review step, Preview stats shows every unit and building as it would be in a Post-Imperial game, with each number broken down into the techs, bonuses and unique techs behind it. It also lists which of your bonuses don't reach a unit, so you can check combinations before building the mod",
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>Custom bonuses that wait.</strong> A card can start from an age (\"Archers +15% HP from the Castle Age\"), grow each age (\"Militia line +5/+10/+15 HP\"), or wait until a building is up (\"free Loom once a Mill is built\")",
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>More from your custom bonus cards.</strong> One card can target several groups at once, cards from your library can be team bonuses or go inside a custom unique tech, and a card can show an image of your choice",
@@ -211,6 +208,8 @@ CHANGELOG: dict[str, list[str]] = {
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>Two starting trees.</strong> Full Tech Tree (recommended) has every standard unit, building and tech. Everything also turns on every regional unit line, with the extras on each building's second page",
         "<strong class=\"color-accent-2\">NEW:</strong> Two Thracian bonuses: <strong>buildings on any elevation</strong>, and <strong>Castles and towers that speed up nearby Lumberjacks and Miners</strong>",
         "<strong class=\"color-accent-2\">NEW:</strong> An <strong>extend your mod</strong> guide at empireforge.app/extend, for adding your own changes after a build",
+        "<strong class=\"color-accent-2\">NEW:</strong> <strong>The Fortified Outpost</strong> has its own tile on the custom bonus Buildings tab, and belongs to Defensive buildings. Outposts become Fortified Outposts through the Macedonian team bonus",
+        "<strong class=\"color-accent-2\">NEW:</strong> After building a mod, the results page says plainly to <strong>set Data Mod to your mod in the game setup screen</strong> before every game, and how to tell if it isn't in use. It also points to the new extend your mod guide",
         "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>The AI now trains your custom unique unit.</strong> An AI on a civ with a non-vanilla unique unit (the Amazon Archer, say) never built it, even when told to. The mod now tells the game which unit line is yours",
         "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>New civs no longer get a hidden Longship.</strong> A brand-new civ trained Longships nobody picked, and lost its Demolition Ship upgrades with them",
         "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>Mods with several civs</strong> now give each civ the castle, wonder and architecture it asked for, even when another civ in the same mod replaced that civ",
@@ -219,6 +218,7 @@ CHANGELOG: dict[str, list[str]] = {
         "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>Blue boxes in the civ picker</strong> for units we never touched (the Winged Hussar, the Gurjaras' units and others) are gone. <em>Thanks to Maruviel</em>",
         "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>One-time resources cards keep their resource.</strong> A card such as \"+100 stone at the start\" saved in 2.6.0 or 2.6.1 always gave gold. If you made one, open it in the custom bonus editor, pick the resource again, save, then update your civ and rebuild",
         "<strong class=\"color-accent-2\">BUG FIX:</strong> The wizard now says when its civ list isn't from your game, and refreshes it once your game is found",
+        "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>Unreadable bonus cards in a forced dark mode.</strong> Browsers set to darken every page (such as Brave's Night mode) made the card text unreadable. Empire Forge now asks them to leave its pages as designed",
     ],
     "2.6.1": [
         "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>Custom bonus targets missing in the Windows app.</strong> The Units tab listed only a handful of units with just two filter buttons, and the Buildings and Techs tabs were empty: the app was missing the file it reads unit, building and tech names from. It now reads them from your own game files, and keeps its own copy as a backup",
