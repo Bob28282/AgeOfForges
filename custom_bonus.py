@@ -134,8 +134,10 @@ GROUPS: dict[str, dict] = {
                         "buildings": [12, 87, 101, 49, 45]},
     "defensive":       {"label": "Defensive buildings", "kind": "building", "tab": "building", "section": "", "icon": "castle.png",
                         # "C-Bonus, Towers and Castles x2 arrows": every tower
-                        # (Donjon and Bombard Tower included), Castle, Krepost.
-                        "classes": [52], "buildings": [82, 1251]},
+                        # (Donjon and Bombard Tower included), Castle, Krepost;
+                        # plus the Fortified Outpost (2415/2417, team bonus 87),
+                        # which the game classes as a plain building, not a tower.
+                        "classes": [52], "buildings": [82, 1251, 2415, 2417]},
     "towers":          {"label": "Towers",          "kind": "building", "tab": "building", "section": "", "icon": "tower.png",      "classes": [52]},
     "walls":           {"label": "Walls and gates", "kind": "building", "tab": "building", "section": "", "icon": "stone_wall.png", "classes": [27, 39]},
 }
@@ -368,6 +370,21 @@ PICKER_NAMES: dict[int, str] = {ids[0]: label for label, ids in FORMS}
 # Harbor (1189) is the Malay Dock: Thalassocracy upgrades Docks into it, so the
 # Dock's upgrade line covers it and a separate tile only invites confusion.
 PICKER_HIDDEN_BUILDINGS: frozenset[int] = frozenset({1189})
+
+# Buildings the tree data has no node for, offered anyway: id -> (name, the
+# building icon index for aoe2techtree's img/Building/).  The Fortified
+# Outpost (2415/2417) is the Outpost upgraded through the Macedonians' team
+# bonus (team bonus 87 here); the game's strings name it, the tree data doesn't.
+PICKER_EXTRA_BUILDINGS: dict[int, tuple[str, int]] = {2415: ("Fortified Outpost", 116)}
+
+# Buildings a card means EXACTLY, not with their upgrade line.  A building
+# target normally reaches every age version of it, and the game builds the
+# Fortified Outpost as an upgrade of the Outpost, so without this the tile
+# and Defensive buildings also reached plain Outposts (user's call,
+# 2026-10-19: the fortified one only).
+EXACT_BUILDINGS: dict[int, frozenset[int]] = {
+    2415: frozenset({2415, 2417}), 2417: frozenset({2415, 2417}),
+}
 
 
 def with_forms(unit_ids: set[int]) -> set[int]:
@@ -1197,6 +1214,8 @@ def _target_selectors(t: dict, line_of, resolve) -> tuple[list[int], set[int]]:
         # The exact pair, never an upgrade line — jobs don't upgrade.
         return [], set(JOBS[t["id"]]["units"])
     if t["type"] != "group":
+        if t["id"] in EXACT_BUILDINGS:
+            return [], set(EXACT_BUILDINGS[t["id"]])
         if t.get("scope") == "up":
             return [], set(resolve("up", t["id"]) if resolve else with_forms({t["id"]}))
         return [], set(line_of(t["id"]))
@@ -1206,7 +1225,7 @@ def _target_selectors(t: dict, line_of, resolve) -> tuple[list[int], set[int]]:
     if "units" in g:
         ids |= resolve("units", g["units"]) if resolve else with_forms(set(g["units"]))
     for b in g.get("buildings", ()):
-        ids |= line_of(b)
+        ids |= EXACT_BUILDINGS.get(b) or line_of(b)
     if "trained_at" in g and resolve:
         ids |= resolve("trained_at", g["trained_at"])
     if g.get("uu") and resolve:

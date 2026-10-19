@@ -1610,6 +1610,12 @@ def api_builder_custom_bonus_catalog():
             if kind == "unit":
                 entry["category"] = nodes.get((kind, int(sid)), {}).get("category", "other")
             out.append(entry)
+        if kind == "building":
+            for bid, (bname, pic) in custom_bonus.PICKER_EXTRA_BUILDINGS.items():
+                if bname not in seen:
+                    rel = f"aoe2techtree/img/Building/{pic}.png"
+                    out.append({"id": bid, "name": bname, "kind": kind,
+                                "icon": url_for("static", filename=rel) if (static / rel).exists() else ""})
         return sorted(out, key=lambda e: e["name"])
 
     def _art(icon: str) -> str:
