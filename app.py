@@ -201,6 +201,9 @@ def _run_update_check():
 # the one-time "what's new" modal. Add the newest version at the top.
 CHANGELOG: dict[str, list[str]] = {
     "2.6.2": [
+        "<strong class=\"color-accent-2\">NEW:</strong> <strong>The Fortified Outpost</strong> has its own tile on the custom bonus Buildings tab, and belongs to Defensive buildings. Outposts become Fortified Outposts through the Macedonian team bonus",
+        "<strong class=\"color-accent-2\">NEW:</strong> After building a mod, the results page says plainly to <strong>set Data Mod to your mod in the game setup screen</strong> before every game, and how to tell if it isn't in use. It also points to the new extend your mod guide",
+        "<strong class=\"color-accent-2\">BUG FIX:</strong> <strong>Unreadable bonus cards in a forced dark mode.</strong> Browsers set to darken every page (such as Brave's Night mode) made the card text unreadable. Empire Forge now asks them to leave its pages as designed",
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>Fully-upgraded stats.</strong> On the Review step, Preview stats shows every unit and building as it would be in a Post-Imperial game, with each number broken down into the techs, bonuses and unique techs behind it. It also lists which of your bonuses don't reach a unit, so you can check combinations before building the mod",
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>Custom bonuses that wait.</strong> A card can start from an age (\"Archers +15% HP from the Castle Age\"), grow each age (\"Militia line +5/+10/+15 HP\"), or wait until a building is up (\"free Loom once a Mill is built\")",
         "<strong class=\"color-accent-2\">NEW:</strong> <strong>More from your custom bonus cards.</strong> One card can target several groups at once, cards from your library can be team bonuses or go inside a custom unique tech, and a card can show an image of your choice",
