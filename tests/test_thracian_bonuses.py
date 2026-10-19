@@ -97,6 +97,27 @@ check("task ids stay sequential", ids == list(range(len(ids))), str(ids))
 check("x2 makes it +30%", all(abs(t.work_value_1 - 0.30) < 1e-6 for t in auras(SLOT_AURA2, 82)))
 check("a civ without the card has no such aura", not auras(SLOT_ELEV, 82))
 
+
+# The tasks alone do nothing: attribute 63 (Combat Ability) bit 32 switches
+# task-155 auras on, as the Thracians' static bonus does for their Castle.
+# Missing in the first version; in game there was no aura and no outline.
+def aura_bits(slot):
+    out = {}
+    for t in back.techs:
+        if t.civ != slot or not 0 <= t.effect_id < len(back.effects):
+            continue
+        for c in back.effects[t.effect_id].effect_commands:
+            if c.type == 4 and int(c.c) == 63:
+                out[int(c.a)] = out.get(int(c.a), 0) + int(c.d)
+    return out
+
+
+for slot, label in ((SLOT_AURA, "x1"), (SLOT_AURA2, "x2")):
+    bits = aura_bits(slot)
+    check(f"{label}: Castle and all four towers get the aura bit (+32 to attribute 63), unscaled",
+          all(bits.get(uid) == 32 for uid in (82, 79, 234, 235, 236)), str(bits))
+check("a civ without the card switches no aura on", not aura_bits(SLOT_ELEV))
+
 print()
 if failures:
     print(f"{failures} FAILED")

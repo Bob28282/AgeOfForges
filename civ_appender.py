@@ -3986,6 +3986,12 @@ _FORT_AURA_BONUS = 459
 _FORT_AURA_BUILDINGS = (82, 79, 234, 235, 236)
 _WORK_RATE_ATTR = 13
 _AURA_ACTION = 155
+# Attribute 63 is the unit's "Combat Ability" bitfield; bit 32 switches task
+# 155 auras on.  Without it the copied tasks do nothing and the game draws no
+# square aura outline (found in game, 2026-10-19).  The Thracians' static bonus
+# (tech 1292) sets their Castle and Fort to 34 = 32 + 2.
+_COMBAT_ABILITY_ATTR = 63
+_AURA_ENABLE_BIT = 32
 
 
 def _thracian_civ(dat: DatFile) -> int | None:
@@ -4155,8 +4161,17 @@ def _create_bonus_handler(dat: DatFile, bonus_id: int, civ_index: int,
                 task.work_value_1 = t.work_value_1 * mult
                 u.bird.tasks.append(task)
             added += 1
+        # ...and switch the aura on.  ADD rather than SET keeps each building's
+        # other Combat Ability bits (Bessian Metalworking adds bit 4 the same
+        # way); on a Castle it lands on the Thracians' own 34.  The bit is not
+        # scaled by the multiplier.
+        _add_auto_fire_tech(
+            dat, civ_index,
+            [EffectCommand(type=EC_ADD, a=uid, b=-1, c=_COMBAT_ABILITY_ATTR, d=float(_AURA_ENABLE_BIT))
+             for uid in _FORT_AURA_BUILDINGS],
+            name="C-Bonus 459, castle/tower aura on")
         print(f"       Work-rate aura: {len(src)} tasks (+{src[0].work_value_1 * mult:.0%} in "
-              f"{src[0].work_range:g} tiles) on {added} buildings")
+              f"{src[0].work_range:g} tiles) on {added} buildings, aura bit {_AURA_ENABLE_BIT} added")
         return True
 
     if bonus_id == 404:          # Mining Camp technologies free (Bohemians)

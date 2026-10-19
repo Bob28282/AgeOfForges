@@ -102,7 +102,8 @@ QA = [
         unique_unit={"km_idx": 3, "name": "", "description": ""},  # Teutonic Knight (melee)
         castle_ut=preset(22, "castle"),                            # Thalassocracy: Docks -> Harbors
         imperial_ut=preset(32, "imperial"),                        # Timurid Siegecraft: trebuchets +2 range
-        bonuses=B(247, 221, 458, 459),
+        # 459 at x4 (+60%) so the aura is unmistakable in a gather test
+        bonuses=B(247, 221, 458) + [{"id": 459, "multiplier": 4}],
         custom_bonuses=[
             card(UNIT(74, "Militia"), [{"attr": "hp", "op": "add", "steps": {"101": 5, "102": 10, "103": 15}}],
                  when={"steps": True}),
