@@ -4202,7 +4202,12 @@ const _CIV_UNIQUE_BUILDING_IDS = new Set([
 //
 // A named civ template is deliberately NOT filtered through here — the Mapuche
 // really do have the Champi line, and the Portuguese really do have a Feitoria.
-function _filterFullTree(data) {
+// `everything` is the "Everything" template: every unit line, both sides of
+// each shared button (the extras go to the building's page 2), with the techs
+// those lines own.  Buildings stay the base set either way — a Folwark IS a
+// Mill, a Settlement is the Mill and all three camps — and civ-unique
+// buildings stay with their cards (user's call, 2026-10-19).
+function _filterFullTree(data, everything = false) {
   const regUnits = typeof _REGIONAL_UNIT_IDS     !== 'undefined' ? _REGIONAL_UNIT_IDS     : new Set();
   const regBldgs = typeof _REGIONAL_BUILDING_IDS !== 'undefined' ? _REGIONAL_BUILDING_IDS : new Set();
   // Techs owned by a regional unit line.  The line itself is filtered out just
@@ -4220,10 +4225,10 @@ function _filterFullTree(data) {
   );
 
   return {
-    units:     (data.units     || []).filter(id => !regUnits.has(id) && !unlockUnits.has(id)),
+    units:     (data.units     || []).filter(id => (everything || !regUnits.has(id)) && !unlockUnits.has(id)),
     buildings: (data.buildings || []).filter(id => !regBldgs.has(id)
                                                 && !_CIV_UNIQUE_BUILDING_IDS.has(id)),
-    techs:     (data.techs     || []).filter(id => !regTechs.has(id)),
+    techs:     (data.techs     || []).filter(id => everything || !regTechs.has(id)),
   };
 }
 
@@ -4250,7 +4255,8 @@ document.getElementById("btn-open-tree").addEventListener("click", async () => {
   // New SE architecture: showTechtree(civName, [[units],[buildings],[techs]], relativepath)
   // The civ name drives which per-civ layout JSON to load.
   // The initialTree drives which nodes start enabled.
-  let civName    = (templateVal === "full" || templateVal === "_current") ? "Full" : templateVal;
+  const union = templateVal === "full" || templateVal === "everything";
+  let civName    = (union || templateVal === "_current") ? "Full" : templateVal;
   let treeToLoad = null;  // null → showTechtree uses the civ's own defaults
 
   if (draft.tree && draft.tree.units && templateVal === "_current") {
@@ -4258,7 +4264,7 @@ document.getElementById("btn-open-tree").addEventListener("click", async () => {
     treeToLoad = [draft.tree.units, draft.tree.buildings, draft.tree.techs];
   } else if (templateVal !== "_current") {
     try {
-      const url = templateVal === "full"
+      const url = union
         ? "/api/builder/techtree?civ=full"
         : `/api/builder/techtree?civ=${encodeURIComponent(templateVal)}`;
       const res  = await fetch(url);
@@ -4273,8 +4279,8 @@ document.getElementById("btn-open-tree").addEventListener("click", async () => {
       // have the Champi line and no Militia line, the Wei genuinely have Hei
       // Guang Cavalry and no Knights.  Filtering those out was giving South
       // American and Chinese templates a tech tree they can't actually have.
-      if (templateVal === "full") {
-        const full = _filterFullTree(data);
+      if (union) {
+        const full = _filterFullTree(data, templateVal === "everything");
         treeToLoad = [full.units, full.buildings, full.techs];
       } else {
         treeToLoad = [data.units, data.buildings, data.techs];

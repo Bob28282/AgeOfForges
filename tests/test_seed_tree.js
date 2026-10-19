@@ -168,6 +168,32 @@ console.log('\n=== Standard equipment survives ===');
         `${seed.units.length} units / ${seed.techs.length} techs`);
 }
 
+console.log('\n=== "Everything": every regional unit line, base buildings only ===');
+{
+  const all = T._filterFullTree({
+    units:     [...union.units],
+    buildings: [...union.buildings],
+    techs:     [...union.techs],
+  }, true);
+  const u = new Set(all.units), b = new Set(all.buildings), t = new Set(all.techs);
+  for (const [uid, what] of [[2700, 'Mounted Crossbowman'], [2703, 'Varangian Guard'], [873, 'Elephant Archer'],
+                             [751, 'Eagle Scout'], [250, 'Longship'], [2550, 'Champi Scout']]) {
+    if (union.units.has(uid)) check(`${what} (${uid}) IS in Everything`, u.has(uid));
+  }
+  for (const [uid, what] of [[39, 'Cavalry Archer'], [1901, 'Fire Lancer'], [1104, 'Demolition Raft']]) {
+    check(`${what} (${uid}) is still in Everything — both sides of the button`, u.has(uid));
+  }
+  check('Cranequins (1452) comes with its line', t.has(1452));
+  const regB = swapIds.filter(id => b.has(id));
+  check('no regional building (Settlement, Folwark, Mule Cart) in Everything', regB.length === 0, regB.join(', '));
+  const uniq = [...T._CIV_UNIQUE_BUILDING_IDS].filter(id => b.has(id));
+  check('no civ-unique building in Everything — cards own them', uniq.length === 0, uniq.join(', '));
+  const unl = Object.values(UNLOCK).flat().filter(id => u.has(id));
+  check('no Unlock-card unit in Everything', unl.length === 0, unl.join(', '));
+  check('Everything is a superset of the Full Tech Tree', seed.units.every(id => u.has(id))
+        && seed.buildings.every(id => b.has(id)) && seed.techs.every(id => t.has(id)));
+}
+
 console.log('\n=== Unlock unit table matches the backend ===');
 {
   const py = fs.readFileSync(path.join(ROOT, 'civ_appender.py'), 'utf8');
