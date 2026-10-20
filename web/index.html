@@ -12,7 +12,7 @@ header{padding:28px max(20px,calc((100% - 1120px)/2));border-bottom:1px solid va
 .brand{color:var(--gold);font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;font-weight:800}h1{margin:.3rem 0;font-family:Georgia,serif;font-size:clamp(2rem,5vw,3.2rem)}header p{color:var(--muted);max-width:680px;margin:0}
 main{max-width:1120px;margin:28px auto;padding:0 20px 60px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);gap:20px}
 .panel{background:linear-gradient(150deg,#2b261e,#211e19);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 16px 40px #0003}.panel h2{font-family:Georgia,serif;color:var(--gold);margin:0 0 16px;font-size:1.4rem}.section{margin-bottom:20px}.section:last-child{margin-bottom:0}
-label{display:block;font-weight:650;font-size:.9rem;margin:12px 0 6px}input,textarea,select{width:100%;border:1px solid #62513a;background:#171512;color:var(--text);border-radius:8px;padding:11px 12px;font:inherit}textarea{resize:vertical}input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+label{display:block;font-weight:650;font-size:.9rem;margin:12px 0 6px}input,textarea,select{width:100%;border:1px solid #62513a;background:#171512;color:var(--text);border-radius:8px;padding:11px 12px;font:inherit}.uu-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.uu-stats .stat-field{min-width:0}.uu-stats label{margin-top:8px}.uu-stats input{padding:9px 10px}textarea{resize:vertical}input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 small,.muted{color:var(--muted)}.muted{font-size:.9rem}.bonus-row{display:flex;gap:8px;margin-top:8px}.bonus-row input{min-width:0}.bonus-row button{flex:0 0 auto}.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tree-group{border:1px solid var(--line);border-radius:9px;margin:10px 0;padding:10px}.tree-group summary{font-weight:750;color:var(--gold);cursor:pointer}.tree-item{display:flex;align-items:flex-start;gap:8px;border:1px solid #4b3d2b;border-radius:8px;padding:8px;background:#17151288}.tree-item input{width:auto;margin-top:5px;accent-color:var(--gold)}.tree-item label{margin:0;font-weight:500}.tree-id{display:block;color:var(--muted);font-size:.75rem}.check{display:flex;align-items:center;gap:9px;border:1px solid #4b3d2b;border-radius:8px;padding:9px;background:#17151288}.check input{width:auto;accent-color:var(--gold)}.check label{margin:0;font-weight:500}
 button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);color:#21180d;border-radius:9px;padding:10px 14px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:#30291f;color:var(--text);border-color:#665239}button.danger{background:#39231d;color:#ffd9ca;border-color:#7c4432}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}.preview-name{font-family:Georgia,serif;font-size:2rem;overflow-wrap:anywhere}.eyebrow{font-size:.72rem;text-transform:uppercase;letter-spacing:.13em;color:var(--gold);font-weight:800}.preview-tag{color:var(--muted);margin-top:2px}.stat{border-top:1px solid var(--line);padding:12px 0}.stat strong{display:block;font-size:1.5rem;color:var(--gold)}.notice{border-left:3px solid var(--gold);padding:10px 12px;background:#3a2d1b;border-radius:0 8px 8px 0;color:#f5e6c9;font-size:.9rem}.status{min-height:1.5em;color:var(--green);font-size:.9rem;margin-top:10px}footer{max-width:1120px;margin:auto;padding:0 20px 30px;color:var(--muted);font-size:.85rem}
 @media(max-width:780px){main{grid-template-columns:1fr}.checks{grid-template-columns:1fr 1fr}}@media(max-width:430px){.checks{grid-template-columns:1fr}.panel{padding:16px}}
@@ -60,6 +60,36 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
       <input id="uu-name" maxlength="60" placeholder="e.g. Royal Longbowman" autocomplete="off">
       <label for="uu-description">Unique unit description</label>
       <textarea id="uu-description" rows="2" maxlength="240" placeholder="Describe the unit’s role and strengths"></textarea>
+      <h3>Base unit stats (optional overrides)</h3>
+      <p class="muted">Leave a field blank to keep the game’s inherited value. These field names match the existing build pipeline. Cost applies to both tiers.</p>
+      <div class="uu-stats">
+        <div class="stat-field"><label for="uu-hp-base">Hit points</label><input id="uu-hp-base" data-uu-override="hp_base" type="number" min="1" max="99999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-attack-base">Attack</label><input id="uu-attack-base" data-uu-override="attack_base" type="number" min="0" max="9999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-melee-base">Melee armor</label><input id="uu-melee-base" data-uu-override="melee_base" type="number" min="0" max="999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-pierce-base">Pierce armor</label><input id="uu-pierce-base" data-uu-override="pierce_base" type="number" min="0" max="999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-range-base">Range</label><input id="uu-range-base" data-uu-override="range_base" type="number" min="0" max="99" step="0.1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-speed-base">Movement speed</label><input id="uu-speed-base" data-uu-override="speed_base" type="number" min="0.01" max="99" step="0.05" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-reload-base">Reload time</label><input id="uu-reload-base" data-uu-override="reload_base" type="number" min="0.01" max="999" step="0.1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-train-base">Training time (seconds)</label><input id="uu-train-base" data-uu-override="train_base" type="number" min="1" max="9999" step="1" placeholder="Default"></div>
+      </div>
+      <h3>Elite stats (optional)</h3>
+      <div class="uu-stats">
+        <div class="stat-field"><label for="uu-hp-elite">Hit points</label><input id="uu-hp-elite" data-uu-override="hp_elite" type="number" min="1" max="99999" step="1" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-attack-elite">Attack</label><input id="uu-attack-elite" data-uu-override="attack_elite" type="number" min="0" max="9999" step="1" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-melee-elite">Melee armor</label><input id="uu-melee-elite" data-uu-override="melee_elite" type="number" min="0" max="999" step="1" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-pierce-elite">Pierce armor</label><input id="uu-pierce-elite" data-uu-override="pierce_elite" type="number" min="0" max="999" step="1" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-range-elite">Range</label><input id="uu-range-elite" data-uu-override="range_elite" type="number" min="0" max="99" step="0.1" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-speed-elite">Movement speed</label><input id="uu-speed-elite" data-uu-override="speed_elite" type="number" min="0.01" max="99" step="0.05" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-reload-elite">Reload time</label><input id="uu-reload-elite" data-uu-override="reload_elite" type="number" min="0.01" max="999" step="0.1" placeholder="Inherit base"></div>
+        <div class="stat-field"><label for="uu-train-elite">Training time (seconds)</label><input id="uu-train-elite" data-uu-override="train_elite" type="number" min="1" max="9999" step="1" placeholder="Inherit base"></div>
+      </div>
+      <h3>Training cost (shared)</h3>
+      <div class="uu-stats">
+        <div class="stat-field"><label for="uu-cost-food">Food</label><input id="uu-cost-food" data-uu-override="cost_food" type="number" min="0" max="99999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-cost-wood">Wood</label><input id="uu-cost-wood" data-uu-override="cost_wood" type="number" min="0" max="99999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-cost-stone">Stone</label><input id="uu-cost-stone" data-uu-override="cost_stone" type="number" min="0" max="99999" step="1" placeholder="Default"></div>
+        <div class="stat-field"><label for="uu-cost-gold">Gold</label><input id="uu-cost-gold" data-uu-override="cost_gold" type="number" min="0" max="99999" step="1" placeholder="Default"></div>
+      </div>
       <p id="uu-status" class="muted" role="status" aria-live="polite">Select a base unit and give it a name.</p>
     </section>
   </div>
@@ -180,7 +210,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
       castle: -1,
       emblem: "",
       hero_unit: null,
-      unique_unit: { km_idx: null, vanilla_id: $("uu-base").value === "" ? null : Number($("uu-base").value), name: $("uu-name").value.trim(), description: $("uu-description").value.trim(), overrides: {}, advanced_flags: {} },
+      unique_unit: { km_idx: null, vanilla_id: $("uu-base").value === "" ? null : Number($("uu-base").value), name: $("uu-name").value.trim(), description: $("uu-description").value.trim(), overrides: getUUOverrides(), advanced_flags: {} },
       second_uu: null,
       bonuses: [],
       custom_bonuses: [],
@@ -204,13 +234,28 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
       }
     };
   }
+  function getUUOverrides() {
+    const overrides={};
+    document.querySelectorAll("[data-uu-override]").forEach(input=>{
+      if(input.value.trim()==="")return;
+      const value=input.valueAsNumber;
+      if(Number.isFinite(value)&&input.validity.valid)overrides[input.dataset.uuOverride]=value;
+    });
+    return overrides;
+  }
+  function setUUOverrides(overrides) {
+    document.querySelectorAll("[data-uu-override]").forEach(input=>{
+      const value=overrides&&overrides[input.dataset.uuOverride];
+      input.value=value===undefined||value===null?"":String(value);
+    });
+  }
   function renderUniqueUnitOptions(selectedId=null) {
     const select=$("uu-base");
     const previous=selectedId===null?select.value:String(selectedId);
     const units=treeCatalog.units;
     select.innerHTML='<option value="">Choose a base unit…</option>'+units.map(item=>'<option value="'+item.id+'">'+escapeHtml(item.name)+' (ID '+item.id+')</option>').join("");
     if(previous && units.some(item=>String(item.id)===String(previous))) select.value=String(previous);
-    $("uu-status").textContent=units.length ? "Choose a base unit. Stat overrides and elite variants are not configured yet." : "Load a reference tech tree first.";
+    $("uu-status").textContent=units.length ? "Choose a base unit. Blank stat fields keep inherited values." : "Load a reference tech tree first.";
   }
   function updatePreview() {
     $("preview-name").textContent = $("civ-name").value.trim() || "Unnamed Civilization";
@@ -252,6 +297,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
         $("uu-base").dataset.importedId=data.unique_unit?.vanilla_id==null?"":String(data.unique_unit.vanilla_id);
         $("uu-name").value=String(data.unique_unit?.name||"").slice(0,60);
         $("uu-description").value=String(data.unique_unit?.description||"").slice(0,240);
+        setUUOverrides(data.unique_unit?.overrides||{});
         renderBonuses();loadCivTree($("base-civ").value,true);updatePreview();$("status").textContent="Empire Forge civilization file imported. Tech-tree IDs restored; bonus ideas are restored only when browser-editor notes are present.";
       } else {
         $("status").textContent="This file format isn't supported yet. Import an Empire Forge empireforge_v2 file or a browser draft.";
@@ -261,7 +307,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
   });
   $("reset").addEventListener("click",()=>{
     if(!confirm("Clear this draft from the page? Exported files will not be affected."))return;
-    fields.forEach(id=>$(id).value="");$("uu-base").value="";$("uu-name").value="";$("uu-description").value="";bonuses=[""];treeSelection={units:[],buildings:[],techs:[]};
+    fields.forEach(id=>$(id).value="");$("uu-base").value="";$("uu-name").value="";$("uu-description").value="";setUUOverrides({});bonuses=[""];treeSelection={units:[],buildings:[],techs:[]};
     renderBonuses();loadCivTree($("base-civ").value,false);updatePreview();$("status").textContent="New blank draft started.";
   });
   const civSelect=$("base-civ");
@@ -272,6 +318,10 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
   $("uu-base").addEventListener("change",()=>{const unit=treeCatalog.units.find(item=>String(item.id)===$("uu-base").value);if(unit&&!$("uu-name").value.trim())$("uu-name").value=unit.name+" (Elite)";});
   $("uu-name").addEventListener("input",()=>{});
   $("uu-description").addEventListener("input",()=>{});
+  document.querySelectorAll("[data-uu-override]").forEach(input=>input.addEventListener("input",()=>{
+    if(input.value!==""&&!input.validity.valid){$("uu-status").textContent="Check the stat value; it is outside the allowed range.";return;}
+    $("uu-status").textContent=Object.keys(getUUOverrides()).length+" stat override(s) will be exported. Blank fields keep inherited values.";
+  }));
   renderBonuses();updatePreview();loadCivTree(civSelect.value,false);
 })();
 </script>
