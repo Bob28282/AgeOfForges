@@ -37,9 +37,13 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     </section>
     <section class="panel section" aria-labelledby="bonus-heading">
       <h2 id="bonus-heading">02 · Civilization bonuses</h2>
-      <p class="muted">Write down your ideas as you design. These notes are saved in the exported draft.</p>
-      <div id="bonuses"></div>
-      <div class="actions"><button type="button" id="add-bonus">+ Add bonus</button></div>
+      <p class="muted">Choose implemented bonus cards. These are saved as real bonus IDs in the Empire Forge file; unavailable cards are excluded from the picker.</p>
+      <label for="bonus-search">Search implemented bonuses</label>
+      <input id="bonus-search" type="search" placeholder="Search bonuses by name or ID…" autocomplete="off">
+      <div class="bonus-row"><select id="bonus-choice" aria-label="Available civilization bonus"><option value="">Loading bonus catalog…</option></select><input id="bonus-multiplier" type="number" min="1" max="10" step="1" value="1" aria-label="Bonus multiplier" style="max-width:100px"><button type="button" id="add-bonus">Add card</button></div>
+      <p id="bonus-status" class="muted" role="status" aria-live="polite">Loading supported bonus cards from the project catalog…</p>
+      <div id="bonus-cards"></div>
+      <details class="tree-group"><summary>Planning notes (not applied in-game)</summary><p class="muted">Keep ideas here that you haven’t converted to a supported bonus card yet.</p><div id="bonuses"></div><div class="actions"><button type="button" id="add-bonus-idea">+ Add planning note</button></div></details>
     </section>
     <section class="panel section" aria-labelledby="tree-heading">
       <h2 id="tree-heading">03 · Tech tree notes</h2>
@@ -98,7 +102,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     <div class="preview-name" id="preview-name">Unnamed Civilization</div>
     <div class="preview-tag" id="preview-tag">Choose a type or tagline</div>
     <p id="preview-description" class="muted">Your description will appear here.</p>
-    <div class="stat"><strong id="bonus-count">0</strong><span class="muted">bonus ideas</span></div>
+    <div class="stat"><strong id="bonus-count">0</strong><span class="muted">bonus cards</span></div>
     <div class="stat"><strong id="tree-count">0</strong><span class="muted">tech-tree lines selected</span></div>
     <div class="section">
       <h2 id="save-heading">Save your work</h2>
@@ -124,18 +128,47 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
   const civIds = ["ACHAEMENIDS","ARMENIANS","ATHENIANS","AZTECS","BENGALIS","BERBERS","BOHEMIANS","BRITONS","BULGARIANS","BURGUNDIANS","BURMESE","BYZANTINES","CELTS","CHINESE","CUMANS","DRAVIDIANS","ETHIOPIANS","FRANKS","GEORGIANS","GOTHS","GURJARAS","HUNS","INCAS","INDIANS","ITALIANS","JAPANESE","JURCHENS","KHITANS","KHMER","KOREANS","LITHUANIANS","MACEDONIANS","MAGYAR","MALAY","MALIANS","MAPUCHE","MAYANS","MONGOLS","MUISCA","PERSIANS","POLES","PORTUGUESE","PURU","ROMANS","SARACENS","SHU","SICILIANS","SLAVS","SPANISH","SPARTANS","TATARS","TEUTONS","THRACIANS","TUPI","TURKS","VIETNAMESE","VIKINGS","WEI","WU"];
   const fields = ["civ-name","civ-tagline","civ-description"];
   let bonuses = [""];
+  let selectedBonuses = [];
+  let bonusCatalog = [];
   let treeSelection = {units: [], buildings: [], techs: []};
   let treeCatalog = {units: [], buildings: [], techs: []};
   const treeLabels = {units:"Units", buildings:"Buildings", techs:"Technologies"};
   const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const prettyCiv = id => id.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
-  function renderBonuses() {
+  function renderBonusIdeas() {
     $("bonuses").innerHTML = bonuses.map((bonus,i) =>
       '<div class="bonus-row"><input aria-label="Bonus idea '+(i+1)+'" data-bonus="'+i+'" maxlength="180" placeholder="e.g. Archers move 10% faster" value="'+escapeHtml(bonus)+'">'+
       (bonuses.length>1?'<button class="danger" type="button" data-remove="'+i+'" aria-label="Remove bonus '+(i+1)+'">×</button>':'')+'</div>'
     ).join("");
     $("bonuses").querySelectorAll("[data-bonus]").forEach(input => input.addEventListener("input", e => {bonuses[+e.target.dataset.bonus]=e.target.value; updatePreview();}));
-    $("bonuses").querySelectorAll("[data-remove]").forEach(button => button.addEventListener("click", () => {bonuses.splice(+button.dataset.remove,1);renderBonuses();updatePreview();}));
+    $("bonuses").querySelectorAll("[data-remove]").forEach(button => button.addEventListener("click", () => {bonuses.splice(+button.dataset.remove,1);renderBonusIdeas();updatePreview();}));
+  }
+  function renderBonusCards() {
+    const query=$("bonus-search").value.trim().toLocaleLowerCase();
+    const selected=new Set(selectedBonuses.map(b=>Number(b.id)));
+    const available=bonusCatalog.filter(b=>!selected.has(b.id)&&(b.name.toLocaleLowerCase().includes(query)||String(b.id).includes(query)));
+    $("bonus-choice").innerHTML='<option value="">Choose a bonus card…</option>'+available.slice(0,250).map(b=>'<option value="'+b.id+'">'+escapeHtml(b.name)+' (ID '+b.id+')</option>').join("");
+    $("bonus-status").textContent=bonusCatalog.length ? bonusCatalog.length+" supported bonus cards available · "+selectedBonuses.length+" selected." : "Bonus catalog could not be loaded. Check your connection and try again.";
+    $("bonus-cards").innerHTML=selectedBonuses.map((b,i)=>{
+      const item=bonusCatalog.find(x=>x.id===Number(b.id));
+      return '<div class="bonus-row"><div style="flex:1;min-width:0">'+escapeHtml(item?item.name:"Bonus #"+b.id)+'<span class="tree-id">ID '+b.id+'</span></div><label style="margin:0;max-width:100px">Multiplier<input type="number" min="1" max="10" step="1" value="'+Math.max(1,Math.min(10,Number(b.multiplier)||1))+'" data-bonus-multiplier="'+i+'"></label><button class="danger" type="button" data-remove-card="'+i+'" aria-label="Remove bonus card">×</button></div>';
+    }).join("")||'<p class="muted">No implemented bonus cards selected yet.</p>';
+    $("bonus-cards").querySelectorAll("[data-bonus-multiplier]").forEach(input=>input.addEventListener("change",()=>{const i=Number(input.dataset.bonusMultiplier);selectedBonuses[i].multiplier=Math.max(1,Math.min(10,Math.round(Number(input.value)||1)));renderBonusCards();updatePreview();}));
+    $("bonus-cards").querySelectorAll("[data-remove-card]").forEach(button=>button.addEventListener("click",()=>{selectedBonuses.splice(Number(button.dataset.removeCard),1);renderBonusCards();updatePreview();}));
+  }
+  async function loadBonusCatalog() {
+    const base="https://raw.githubusercontent.com/Bob28282/AgeOfForges/main/";
+    try {
+      const [namesResponse,catalogResponse]=await Promise.all([fetch(base+"bonus_names.json"),fetch(base+"bonus_catalog_raw.json")]);
+      if(!namesResponse.ok||!catalogResponse.ok)throw new Error("catalog fetch failed");
+      const [names,catalog]=await Promise.all([namesResponse.json(),catalogResponse.json()]);
+      const supported=new Set([...Object.entries(catalog.civ||{}).filter(([,v])=>Array.isArray(v)&&v.length).map(([id])=>Number(id)),...Object.entries(catalog.ec_list||{}).filter(([,v])=>Array.isArray(v)&&v.length).map(([id])=>Number(id))]);
+      bonusCatalog=Object.entries(names).map(([id,name])=>({id:Number(id),name:String(name)})).filter(b=>supported.has(b.id)&&![51,333].includes(b.id)).sort((a,b)=>a.name.localeCompare(b.name));
+      renderBonusCards();
+    } catch(error) {
+      $("bonus-status").textContent="Could not load the supported bonus catalog. Reload the page to retry.";
+      $("bonus-choice").innerHTML='<option value="">Bonus catalog unavailable</option>';
+    }
   }
   function renderTree() {
     const query=$("tree-search").value.trim().toLocaleLowerCase();
@@ -212,7 +245,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
       hero_unit: null,
       unique_unit: { km_idx: null, vanilla_id: $("uu-base").value === "" ? null : Number($("uu-base").value), name: $("uu-name").value.trim(), description: $("uu-description").value.trim(), overrides: getUUOverrides(), advanced_flags: {} },
       second_uu: null,
-      bonuses: [],
+      bonuses: selectedBonuses.map(b=>({id:Number(b.id),multiplier:Number(b.multiplier)||1})),
       custom_bonuses: [],
       team_bonuses: [],
       custom_team_bonuses: [],
@@ -261,11 +294,13 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     $("preview-name").textContent = $("civ-name").value.trim() || "Unnamed Civilization";
     $("preview-tag").textContent = $("civ-tagline").value.trim() || "Choose a type or tagline";
     $("preview-description").textContent = $("civ-description").value.trim() || "Your description will appear here.";
-    $("bonus-count").textContent = bonuses.filter(v=>v.trim()).length;
+    $("bonus-count").textContent = selectedBonuses.length;
     $("tree-count").textContent = treeSelection.units.length + treeSelection.buildings.length + treeSelection.techs.length;
   }
   fields.forEach(id => $(id).addEventListener("input",updatePreview));
-  $("add-bonus").addEventListener("click",()=>{if(bonuses.length>=20){$("status").textContent="You can add up to 20 bonus ideas in this draft.";return;}bonuses.push("");renderBonuses();updatePreview();$("bonuses").lastElementChild.querySelector("input").focus();});
+  $("add-bonus").addEventListener("click",()=>{const id=Number($("bonus-choice").value),multiplier=Number($("bonus-multiplier").value)||1;if(!Number.isInteger(id)||!bonusCatalog.some(b=>b.id===id)){$("bonus-status").textContent="Choose a bonus card first.";return;}if(selectedBonuses.some(b=>b.id===id)){$("bonus-status").textContent="That bonus card is already selected.";return;}selectedBonuses.push({id,multiplier:Math.max(1,Math.min(10,Math.round(multiplier)))});renderBonusCards();updatePreview();});
+  $("add-bonus-idea").addEventListener("click",()=>{if(bonuses.length>=20){$("status").textContent="You can add up to 20 planning notes.";return;}bonuses.push("");renderBonusIdeas();updatePreview();$("bonuses").lastElementChild.querySelector("input").focus();});
+  $("bonus-search").addEventListener("input",renderBonusCards);
   $("export").addEventListener("click",()=>{
     const draft=getDraft();
     if(!draft.alias){$("status").textContent="Please enter a civilization name before exporting."; $("civ-name").focus();return;}
@@ -285,20 +320,23 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
         $("civ-tagline").value=String(data.identity.tagline||"").slice(0,30);
         $("civ-description").value=String(data.identity.description||"").slice(0,400);
         bonuses=Array.isArray(data.bonus_ideas)?data.bonus_ideas.slice(0,20).map(v=>String(v).slice(0,180)):[ "" ];
+        selectedBonuses=[];
         treeSelection={units:[],buildings:[],techs:[]};
-        renderBonuses();loadCivTree($("base-civ").value,true);updatePreview();$("status").textContent="Older browser draft imported. Its old tech-tree notes cannot be converted automatically to real IDs.";
+        renderBonusIdeas();renderBonusCards();loadCivTree($("base-civ").value,true);updatePreview();$("status").textContent="Older browser draft imported. Its old tech-tree notes cannot be converted automatically to real IDs.";
       } else if(data.format==="empireforge_v2" && data.schema_version===2) {
         $("civ-name").value=String(data.alias||"").slice(0,40);
         $("civ-tagline").value=String(data.tagline||"").slice(0,30);
         $("civ-description").value=String(data.share_description||data.description||"").slice(0,400);
         const notes=data.browser_notes && data.browser_notes.format==="empire-forge-browser-notes" ? data.browser_notes : {};
         bonuses=Array.isArray(notes.bonus_ideas)?notes.bonus_ideas.slice(0,20).map(v=>String(v).slice(0,180)):[ "" ];
+        selectedBonuses=Array.isArray(data.bonuses)?data.bonuses.filter(b=>b&&Number.isInteger(Number(b.id))).map(b=>({id:Number(b.id),multiplier:Math.max(1,Math.min(10,Math.round(Number(b.multiplier)||1)))})):[];
+        renderBonusCards();
         treeSelection={units:Array.isArray(data.tree?.units)?data.tree.units.filter(Number.isInteger):[],buildings:Array.isArray(data.tree?.buildings)?data.tree.buildings.filter(Number.isInteger):[],techs:Array.isArray(data.tree?.techs)?data.tree.techs.filter(Number.isInteger):[]};
         $("uu-base").dataset.importedId=data.unique_unit?.vanilla_id==null?"":String(data.unique_unit.vanilla_id);
         $("uu-name").value=String(data.unique_unit?.name||"").slice(0,60);
         $("uu-description").value=String(data.unique_unit?.description||"").slice(0,240);
         setUUOverrides(data.unique_unit?.overrides||{});
-        renderBonuses();loadCivTree($("base-civ").value,true);updatePreview();$("status").textContent="Empire Forge civilization file imported. Tech-tree IDs restored; bonus ideas are restored only when browser-editor notes are present.";
+        renderBonusIdeas();loadCivTree($("base-civ").value,true);updatePreview();$("status").textContent="Empire Forge civilization file imported. Tech-tree IDs restored; bonus ideas are restored only when browser-editor notes are present.";
       } else {
         $("status").textContent="This file format isn't supported yet. Import an Empire Forge empireforge_v2 file or a browser draft.";
       }
@@ -307,8 +345,8 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
   });
   $("reset").addEventListener("click",()=>{
     if(!confirm("Clear this draft from the page? Exported files will not be affected."))return;
-    fields.forEach(id=>$(id).value="");$("uu-base").value="";$("uu-name").value="";$("uu-description").value="";setUUOverrides({});bonuses=[""];treeSelection={units:[],buildings:[],techs:[]};
-    renderBonuses();loadCivTree($("base-civ").value,false);updatePreview();$("status").textContent="New blank draft started.";
+    fields.forEach(id=>$(id).value="");$("uu-base").value="";$("uu-name").value="";$("uu-description").value="";setUUOverrides({});bonuses=[""];selectedBonuses=[];treeSelection={units:[],buildings:[],techs:[]};
+    renderBonusIdeas();loadCivTree($("base-civ").value,false);updatePreview();$("status").textContent="New blank draft started.";
   });
   const civSelect=$("base-civ");
   civSelect.innerHTML=civIds.map(id=>'<option value="'+id+'">'+escapeHtml(prettyCiv(id))+'</option>').join("");
@@ -322,7 +360,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     if(input.value!==""&&!input.validity.valid){$("uu-status").textContent="Check the stat value; it is outside the allowed range.";return;}
     $("uu-status").textContent=Object.keys(getUUOverrides()).length+" stat override(s) will be exported. Blank fields keep inherited values.";
   }));
-  renderBonuses();updatePreview();loadCivTree(civSelect.value,false);
+  renderBonusIdeas();renderBonusCards();updatePreview();loadCivTree(civSelect.value,false);loadBonusCatalog();
 })();
 </script>
 </body>
