@@ -1,0 +1,5 @@
+[build]
+  publish = "web"
+
+# The browser editor is static and does not require the Flask server.
+# Deploy this site from the web-hosting-port branch while testing.
