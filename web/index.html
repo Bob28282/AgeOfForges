@@ -46,8 +46,8 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
       <details class="tree-group"><summary>Planning notes (not applied in-game)</summary><p class="muted">Keep ideas here that you haven’t converted to a supported bonus card yet.</p><div id="bonuses"></div><div class="actions"><button type="button" id="add-bonus-idea">+ Add planning note</button></div></details>
     </section>
     <section class="panel section" aria-labelledby="tree-heading">
-      <h2 id="tree-heading">03 · Tech tree notes</h2>
-      <p class="muted">Choose a reference civilization to load real unit, building, and technology IDs from the project’s tech-tree data. Check an item to include it in your custom civilization. This edits the exported tree arrays; it does not yet validate prerequisites.</p>
+      <h2 id="tree-heading">03 · Tech tree</h2>
+      <p class="muted">Choose a reference civilization to load real unit, building, and technology IDs from the project’s tech-tree data. Check an item to include it in your custom civilization. Prerequisites are not yet validated.</p>
       <label for="base-civ">Reference civilization</label>
       <select id="base-civ" aria-describedby="tree-status"></select>
       <label for="tree-search">Find a unit, building, or technology</label>
@@ -57,7 +57,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     </section>
     <section class="panel section" aria-labelledby="unique-unit-heading">
       <h2 id="unique-unit-heading">04 · Unique unit</h2>
-      <p class="muted">Choose a vanilla unit as the starting point for your civilization’s unique unit. This records the base unit and custom name in the exported draft; advanced stat overrides come next.</p>
+      <p class="muted">Choose a vanilla unit as the starting point for your civilization’s unique unit. The selected unit, name, description, and optional stat overrides are saved in the exported draft.</p>
       <label for="uu-base">Base unit</label>
       <select id="uu-base"><option value="">Load a reference tech tree first</option></select>
       <label for="uu-name">Unique unit name</label>
@@ -106,7 +106,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     <div class="stat"><strong id="tree-count">0</strong><span class="muted">tech-tree lines selected</span></div>
     <div class="section">
       <h2 id="save-heading">Save your work</h2>
-      <div class="notice">Exports use Empire Forge’s <code>empireforge_v2</code> format. Tech-tree selections now use real IDs from the project’s civilization tech-tree files. Bonus ideas remain notes, not implemented game bonuses. No game files are uploaded.</div>
+      <div class="notice">Exports use Empire Forge’s <code>empireforge_v2</code> format. Selected civilization bonus cards and tech-tree IDs are written to their real schema fields. Planning notes are separate and do not affect gameplay. No game files are uploaded.</div>
       <div class="actions">
         <button type="button" id="export">Export JSON</button>
         <button type="button" class="secondary" id="import">Import draft</button>
@@ -308,7 +308,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     const url=URL.createObjectURL(blob), a=document.createElement("a");
     a.href=url;a.download=draft.alias.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".civbuilder.json";
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-    $("status").textContent="Empire Forge-format file exported. Bonus and tech-tree notes remain planning-only.";
+    $("status").textContent="Empire Forge-format file exported. Selected bonus cards and tech-tree IDs are included; planning notes are not applied in-game.";
   });
   $("import").addEventListener("click",()=>$("import-file").click());
   $("import-file").addEventListener("change",async e=>{
