@@ -56,7 +56,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     <div class="stat"><strong id="tree-count">0</strong><span class="muted">tech-tree lines selected</span></div>
     <div class="section">
       <h2 id="save-heading">Save your work</h2>
-      <div class="notice">This first browser version exports a <code>.civbuilder.json</code> draft. It is not yet guaranteed to be accepted by the original mod-generation pipeline. No game files are uploaded.</div>
+      <div class="notice">Exports use Empire Forge’s <code>empireforge_v2</code> civilization-file format, with safe defaults for fields this prototype does not edit. Bonus ideas and tech-tree selections are planning notes only, not implemented game bonuses or actual tech-tree IDs. No game files are uploaded.</div>
       <div class="actions">
         <button type="button" id="export">Export JSON</button>
         <button type="button" class="secondary" id="import">Import draft</button>
@@ -67,7 +67,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     </div>
     <div class="section">
       <h2>Next in the web port</h2>
-      <p class="muted">Next we can connect the existing civilization catalog and make exported files compatible with Empire Forge's original builder format. Mod ZIP generation will remain a separate step.</p>
+      <p class="muted">Next we can connect the real civilization, bonus, and tech-tree catalogs. This prototype does not yet edit the full set of fields in the original builder, and it does not generate mods.</p>
     </div>
   </aside>
 </main>
@@ -100,13 +100,46 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     }));
   }
   function getDraft() {
+    // Match the repository's civ_schema.py empireforge_v2 shape. Only identity
+    // fields are real builder settings here; notes remain explicitly separate.
     return {
-      format: "empire-forge-browser-draft",
-      format_version: 1,
-      created_at: new Date().toISOString(),
-      identity: { name:$("civ-name").value.trim(), tagline:$("civ-tagline").value.trim(), description:$("civ-description").value.trim() },
-      bonus_ideas: bonuses.map(v=>v.trim()).filter(Boolean),
-      tech_tree_notes: treeLines.filter(v=>selectedTree.has(v))
+      format: "empireforge_v2",
+      schema_version: 2,
+      _draftVer: 4,
+      alias: $("civ-name").value.trim(),
+      tagline: $("civ-tagline").value.trim(),
+      description: $("civ-description").value.trim(),
+      share_description: $("civ-description").value.trim(),
+      architecture: 2,
+      language: 0,
+      wonder_model: -1,
+      castle_model: -1,
+      wonder: -1,
+      castle: -1,
+      emblem: "",
+      hero_unit: null,
+      unique_unit: { km_idx: null, vanilla_id: null, name: "", description: "", overrides: {}, advanced_flags: {} },
+      second_uu: null,
+      bonuses: [],
+      custom_bonuses: [],
+      team_bonuses: [],
+      custom_team_bonuses: [],
+      castle_ut: { mode: "vanilla", vanilla_km_idx: null, name: "", description: "", cost: {food:0,wood:0,stone:0,gold:0}, time: 0, effects: [], custom_bonuses: [] },
+      imperial_ut: { mode: "vanilla", vanilla_km_idx: null, name: "", description: "", cost: {food:0,wood:0,stone:0,gold:0}, time: 0, effects: [], custom_bonuses: [] },
+      tree: { units: [], buildings: [], techs: [] },
+      long_range_ship: null,
+      long_range_ship_elite: true,
+      starting_scout: null,
+      monk_skin: null,
+      unit_overrides: [],
+      button_moves: [],
+      free_techs: [],
+      monastery_skin_building: null,
+      browser_notes: {
+        format: "empire-forge-browser-notes",
+        bonus_ideas: bonuses.map(v=>v.trim()).filter(Boolean),
+        tech_tree_notes: treeLines.filter(v=>selectedTree.has(v))
+      }
     };
   }
   function updatePreview() {
@@ -120,12 +153,12 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
   $("add-bonus").addEventListener("click",()=>{if(bonuses.length>=20){$("status").textContent="You can add up to 20 bonus ideas in this draft.";return;}bonuses.push("");renderBonuses();updatePreview();$("bonuses").lastElementChild.querySelector("input").focus();});
   $("export").addEventListener("click",()=>{
     const draft=getDraft();
-    if(!draft.identity.name){$("status").textContent="Please enter a civilization name before exporting."; $("civ-name").focus();return;}
+    if(!draft.alias){$("status").textContent="Please enter a civilization name before exporting."; $("civ-name").focus();return;}
     const blob=new Blob([JSON.stringify(draft,null,2)+"\n"],{type:"application/json"});
     const url=URL.createObjectURL(blob), a=document.createElement("a");
-    a.href=url;a.download=draft.identity.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".civbuilder.json";
+    a.href=url;a.download=draft.alias.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".civbuilder.json";
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-    $("status").textContent="Draft exported. Keep a copy somewhere safe.";
+    $("status").textContent="Empire Forge-format file exported. Bonus and tech-tree notes remain planning-only.";
   });
   $("import").addEventListener("click",()=>$("import-file").click());
   $("import-file").addEventListener("change",async e=>{
@@ -138,9 +171,17 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
         $("civ-description").value=String(data.identity.description||"").slice(0,400);
         bonuses=Array.isArray(data.bonus_ideas)?data.bonus_ideas.slice(0,20).map(v=>String(v).slice(0,180)):[ "" ];
         selectedTree=new Set(Array.isArray(data.tech_tree_notes)?data.tech_tree_notes.filter(v=>treeLines.includes(v)):[]);
-        renderBonuses();renderTree();updatePreview();$("status").textContent="Draft imported successfully.";
+        renderBonuses();renderTree();updatePreview();$("status").textContent="Older browser draft imported.";
+      } else if(data.format==="empireforge_v2" && data.schema_version===2) {
+        $("civ-name").value=String(data.alias||"").slice(0,40);
+        $("civ-tagline").value=String(data.tagline||"").slice(0,30);
+        $("civ-description").value=String(data.share_description||data.description||"").slice(0,400);
+        const notes=data.browser_notes && data.browser_notes.format==="empire-forge-browser-notes" ? data.browser_notes : {};
+        bonuses=Array.isArray(notes.bonus_ideas)?notes.bonus_ideas.slice(0,20).map(v=>String(v).slice(0,180)):[ "" ];
+        selectedTree=new Set(Array.isArray(notes.tech_tree_notes)?notes.tech_tree_notes.filter(v=>treeLines.includes(v)):[]);
+        renderBonuses();renderTree();updatePreview();$("status").textContent="Empire Forge civilization file imported. Notes are restored only if this file contains browser-editor notes.";
       } else {
-        $("status").textContent="That JSON isn't a browser draft from this version. Original Empire Forge files aren't converted yet.";
+        $("status").textContent="This file format isn't supported yet. Import an Empire Forge empireforge_v2 file or a browser draft.";
       }
     } catch(err) {$("status").textContent="Couldn't read that file as valid JSON.";}
     e.target.value="";
