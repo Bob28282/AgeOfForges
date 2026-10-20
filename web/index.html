@@ -87,10 +87,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
   let treeCatalog = {units: [], buildings: [], techs: []};
   const treeLabels = {units:"Units", buildings:"Buildings", techs:"Technologies"};
   const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const prettyCiv = id => id.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());  const fields = ["civ-name","civ-tagline","civ-description"];
-  let bonuses = [""];
-  let selectedTree = new Set(["Infantry","Archers","Cavalry"]);
-  const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const prettyCiv = id => id.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
   function renderBonuses() {
     $("bonuses").innerHTML = bonuses.map((bonus,i) =>
       '<div class="bonus-row"><input aria-label="Bonus idea '+(i+1)+'" data-bonus="'+i+'" maxlength="180" placeholder="e.g. Archers move 10% faster" value="'+escapeHtml(bonus)+'">'+
@@ -201,7 +198,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
     $("preview-tag").textContent = $("civ-tagline").value.trim() || "Choose a type or tagline";
     $("preview-description").textContent = $("civ-description").value.trim() || "Your description will appear here.";
     $("bonus-count").textContent = bonuses.filter(v=>v.trim()).length;
-    $("tree-count").textContent = selectedTree.size;
+    $("tree-count").textContent = treeSelection.units.length + treeSelection.buildings.length + treeSelection.techs.length;
   }
   fields.forEach(id => $(id).addEventListener("input",updatePreview));
   $("add-bonus").addEventListener("click",()=>{if(bonuses.length>=20){$("status").textContent="You can add up to 20 bonus ideas in this draft.";return;}bonuses.push("");renderBonuses();updatePreview();$("bonuses").lastElementChild.querySelector("input").focus();});
