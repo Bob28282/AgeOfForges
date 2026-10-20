@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Draft an Age of Empires II custom civilization in your browser and export your work as JSON.">
+<title>Empire Forge — Browser Editor</title>
+<style>
+:root{color-scheme:dark;--bg:#171512;--panel:#242019;--panel2:#30291f;--line:#514330;--gold:#e8bd69;--muted:#c5bba8;--text:#fff8e9;--green:#9fbd82}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#3a2d1c 0,#171512 58%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px max(20px,calc((100% - 1120px)/2));border-bottom:1px solid var(--line);background:#171512d9}
+.brand{color:var(--gold);font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;font-weight:800}h1{margin:.3rem 0;font-family:Georgia,serif;font-size:clamp(2rem,5vw,3.2rem)}header p{color:var(--muted);max-width:680px;margin:0}
+main{max-width:1120px;margin:28px auto;padding:0 20px 60px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);gap:20px}
+.panel{background:linear-gradient(150deg,#2b261e,#211e19);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 16px 40px #0003}.panel h2{font-family:Georgia,serif;color:var(--gold);margin:0 0 16px;font-size:1.4rem}.section{margin-bottom:20px}.section:last-child{margin-bottom:0}
+label{display:block;font-weight:650;font-size:.9rem;margin:12px 0 6px}input,textarea,select{width:100%;border:1px solid #62513a;background:#171512;color:var(--text);border-radius:8px;padding:11px 12px;font:inherit}textarea{resize:vertical}input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+small,.muted{color:var(--muted)}.muted{font-size:.9rem}.bonus-row{display:flex;gap:8px;margin-top:8px}.bonus-row input{min-width:0}.bonus-row button{flex:0 0 auto}.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.check{display:flex;align-items:center;gap:9px;border:1px solid #4b3d2b;border-radius:8px;padding:9px;background:#17151288}.check input{width:auto;accent-color:var(--gold)}.check label{margin:0;font-weight:500}
+button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);color:#21180d;border-radius:9px;padding:10px 14px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:#30291f;color:var(--text);border-color:#665239}button.danger{background:#39231d;color:#ffd9ca;border-color:#7c4432}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}.preview-name{font-family:Georgia,serif;font-size:2rem;overflow-wrap:anywhere}.eyebrow{font-size:.72rem;text-transform:uppercase;letter-spacing:.13em;color:var(--gold);font-weight:800}.preview-tag{color:var(--muted);margin-top:2px}.stat{border-top:1px solid var(--line);padding:12px 0}.stat strong{display:block;font-size:1.5rem;color:var(--gold)}.notice{border-left:3px solid var(--gold);padding:10px 12px;background:#3a2d1b;border-radius:0 8px 8px 0;color:#f5e6c9;font-size:.9rem}.status{min-height:1.5em;color:var(--green);font-size:.9rem;margin-top:10px}footer{max-width:1120px;margin:auto;padding:0 20px 30px;color:var(--muted);font-size:.85rem}
+@media(max-width:780px){main{grid-template-columns:1fr}.checks{grid-template-columns:1fr 1fr}}@media(max-width:430px){.checks{grid-template-columns:1fr}.panel{padding:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Age of Empires II · Community tool</div>
+  <h1>Empire Forge</h1>
+  <p>Draft a civilization in your browser. Your work stays on this device until you choose to export it.</p>
+</header>
+<main>
+  <div class="column">
+    <section class="panel section" aria-labelledby="identity-heading">
+      <h2 id="identity-heading">01 · Civilization identity</h2>
+      <label for="civ-name">Civilization name</label>
+      <input id="civ-name" maxlength="40" placeholder="e.g. Jurchens" autocomplete="off">
+      <label for="civ-tagline">Civilization type / tagline</label>
+      <input id="civ-tagline" maxlength="30" placeholder="e.g. Cavalry and archers" autocomplete="off">
+      <label for="civ-description">Description (optional)</label>
+      <textarea id="civ-description" rows="3" maxlength="400" placeholder="What makes your civilization distinctive?"></textarea>
+    </section>
+    <section class="panel section" aria-labelledby="bonus-heading">
+      <h2 id="bonus-heading">02 · Civilization bonuses</h2>
+      <p class="muted">Write down your ideas as you design. These notes are saved in the exported draft.</p>
+      <div id="bonuses"></div>
+      <div class="actions"><button type="button" id="add-bonus">+ Add bonus</button></div>
+    </section>
+    <section class="panel section" aria-labelledby="tree-heading">
+      <h2 id="tree-heading">03 · Tech tree notes</h2>
+      <p class="muted">Mark the lines you want to include in your design. This is a planning checklist, not yet an in-game tech-tree validator.</p>
+      <div class="checks" id="tech-tree"></div>
+    </section>
+  </div>
+  <aside class="panel" aria-labelledby="preview-heading">
+    <div class="eyebrow">Your civilization</div>
+    <div class="preview-name" id="preview-name">Unnamed Civilization</div>
+    <div class="preview-tag" id="preview-tag">Choose a type or tagline</div>
+    <p id="preview-description" class="muted">Your description will appear here.</p>
+    <div class="stat"><strong id="bonus-count">0</strong><span class="muted">bonus ideas</span></div>
+    <div class="stat"><strong id="tree-count">0</strong><span class="muted">tech-tree lines selected</span></div>
+    <div class="section">
+      <h2 id="save-heading">Save your work</h2>
+      <div class="notice">This first browser version exports a <code>.civbuilder.json</code> draft. It is not yet guaranteed to be accepted by the original mod-generation pipeline. No game files are uploaded.</div>
+      <div class="actions">
+        <button type="button" id="export">Export JSON</button>
+        <button type="button" class="secondary" id="import">Import draft</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <button type="button" class="secondary" id="reset">Start over</button>
+      </div>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </div>
+    <div class="section">
+      <h2>Next in the web port</h2>
+      <p class="muted">Next we can connect the existing civilization catalog and make exported files compatible with Empire Forge's original builder format. Mod ZIP generation will remain a separate step.</p>
+    </div>
+  </aside>
+</main>
+<footer>Empire Forge is an independent community project and is not affiliated with or endorsed by Microsoft. This browser prototype is a work in progress.</footer>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const treeLines = [
+    "Infantry","Archers","Cavalry","Cavalry archers","Siege weapons","Monks",
+    "Navy","Economy","Defensive buildings","Offensive buildings","Blacksmith upgrades","University upgrades"
+  ];
+  const fields = ["civ-name","civ-tagline","civ-description"];
+  let bonuses = [""];
+  let selectedTree = new Set(["Infantry","Archers","Cavalry"]);
+  const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  function renderBonuses() {
+    $("bonuses").innerHTML = bonuses.map((bonus,i) =>
+      '<div class="bonus-row"><input aria-label="Bonus idea '+(i+1)+'" data-bonus="'+i+'" maxlength="180" placeholder="e.g. Archers move 10% faster" value="'+escapeHtml(bonus)+'">'+
+      (bonuses.length>1?'<button class="danger" type="button" data-remove="'+i+'" aria-label="Remove bonus '+(i+1)+'">×</button>':'')+'</div>'
+    ).join("");
+    $("bonuses").querySelectorAll("[data-bonus]").forEach(input => input.addEventListener("input", e => {bonuses[+e.target.dataset.bonus]=e.target.value; updatePreview();}));
+    $("bonuses").querySelectorAll("[data-remove]").forEach(button => button.addEventListener("click", () => {bonuses.splice(+button.dataset.remove,1);renderBonuses();updatePreview();}));
+  }
+  function renderTree() {
+    $("tech-tree").innerHTML = treeLines.map(line => '<div class="check"><input type="checkbox" id="tree-'+line.toLowerCase().replace(/[^a-z0-9]+/g,"-")+'" '+(selectedTree.has(line)?"checked":"")+'><label for="tree-'+line.toLowerCase().replace(/[^a-z0-9]+/g,"-")+'">'+line+'</label></div>').join("");
+    $("tech-tree").querySelectorAll("input").forEach(input => input.addEventListener("change", () => {
+      const line = treeLines.find(name => "tree-"+name.toLowerCase().replace(/[^a-z0-9]+/g,"-")===input.id);
+      if(input.checked) selectedTree.add(line); else selectedTree.delete(line);
+      updatePreview();
+    }));
+  }
+  function getDraft() {
+    return {
+      format: "empire-forge-browser-draft",
+      format_version: 1,
+      created_at: new Date().toISOString(),
+      identity: { name:$("civ-name").value.trim(), tagline:$("civ-tagline").value.trim(), description:$("civ-description").value.trim() },
+      bonus_ideas: bonuses.map(v=>v.trim()).filter(Boolean),
+      tech_tree_notes: treeLines.filter(v=>selectedTree.has(v))
+    };
+  }
+  function updatePreview() {
+    $("preview-name").textContent = $("civ-name").value.trim() || "Unnamed Civilization";
+    $("preview-tag").textContent = $("civ-tagline").value.trim() || "Choose a type or tagline";
+    $("preview-description").textContent = $("civ-description").value.trim() || "Your description will appear here.";
+    $("bonus-count").textContent = bonuses.filter(v=>v.trim()).length;
+    $("tree-count").textContent = selectedTree.size;
+  }
+  fields.forEach(id => $(id).addEventListener("input",updatePreview));
+  $("add-bonus").addEventListener("click",()=>{if(bonuses.length>=20){$("status").textContent="You can add up to 20 bonus ideas in this draft.";return;}bonuses.push("");renderBonuses();updatePreview();$("bonuses").lastElementChild.querySelector("input").focus();});
+  $("export").addEventListener("click",()=>{
+    const draft=getDraft();
+    if(!draft.identity.name){$("status").textContent="Please enter a civilization name before exporting."; $("civ-name").focus();return;}
+    const blob=new Blob([JSON.stringify(draft,null,2)+"\n"],{type:"application/json"});
+    const url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url;a.download=draft.identity.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".civbuilder.json";
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    $("status").textContent="Draft exported. Keep a copy somewhere safe.";
+  });
+  $("import").addEventListener("click",()=>$("import-file").click());
+  $("import-file").addEventListener("change",async e=>{
+    const file=e.target.files&&e.target.files[0];if(!file)return;
+    try {
+      const data=JSON.parse(await file.text());
+      if(data.format==="empire-forge-browser-draft" && data.format_version===1 && data.identity) {
+        $("civ-name").value=String(data.identity.name||"").slice(0,40);
+        $("civ-tagline").value=String(data.identity.tagline||"").slice(0,30);
+        $("civ-description").value=String(data.identity.description||"").slice(0,400);
+        bonuses=Array.isArray(data.bonus_ideas)?data.bonus_ideas.slice(0,20).map(v=>String(v).slice(0,180)):[ "" ];
+        selectedTree=new Set(Array.isArray(data.tech_tree_notes)?data.tech_tree_notes.filter(v=>treeLines.includes(v)):[]);
+        renderBonuses();renderTree();updatePreview();$("status").textContent="Draft imported successfully.";
+      } else {
+        $("status").textContent="That JSON isn't a browser draft from this version. Original Empire Forge files aren't converted yet.";
+      }
+    } catch(err) {$("status").textContent="Couldn't read that file as valid JSON.";}
+    e.target.value="";
+  });
+  $("reset").addEventListener("click",()=>{
+    if(!confirm("Clear this draft from the page? Exported files will not be affected."))return;
+    fields.forEach(id=>$(id).value="");bonuses=[""];selectedTree=new Set(["Infantry","Archers","Cavalry"]);
+    renderBonuses();renderTree();updatePreview();$("status").textContent="New blank draft started.";
+  });
+  renderBonuses();renderTree();updatePreview();
+})();
+</script>
+</body>
+</html>
