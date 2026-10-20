@@ -155,7 +155,7 @@ button{border:1px solid #a47e40;background:linear-gradient(#e8bd69,#bd8c3f);colo
         techs:treeCatalog.techs.filter(item=>item.available).map(item=>item.id)
       };
       $("tree-status").textContent=prettyCiv(civId)+" loaded · "+treeCatalog.units.length+" units, "+treeCatalog.buildings.length+" buildings, "+treeCatalog.techs.length+" technologies. Selected items are saved as real IDs.";
-      renderTree();renderUniqueUnitOptions();updatePreview();
+      renderTree();renderUniqueUnitOptions($("uu-base").dataset.importedId||null);$("uu-base").dataset.importedId="";updatePreview();
     } catch(error) {
       $("tree-status").textContent="Could not load the reference tech tree. Check your connection and try another civilization.";
       $("tech-tree").innerHTML='<p class="muted">Tech-tree data is loaded from the project’s public GitHub repository. It may be temporarily unavailable if GitHub cannot be reached.</p>';
